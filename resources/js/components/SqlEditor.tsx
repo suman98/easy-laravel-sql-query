@@ -2,8 +2,14 @@ import { useMemo } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { sql, MySQL, PostgreSQL, SQLite } from "@codemirror/lang-sql";
 import { javascript } from "@codemirror/lang-javascript";
-import { autocompletion, type CompletionContext, type CompletionResult } from "@codemirror/autocomplete";
+import {
+  acceptCompletion,
+  autocompletion,
+  type CompletionContext,
+  type CompletionResult,
+} from "@codemirror/autocomplete";
 import { keymap } from "@codemirror/view";
+import { Prec } from "@codemirror/state";
 import type { Driver } from "@/lib/clientTypes";
 import type { AutocompleteTerm } from "@/lib/clientTypes";
 
@@ -48,15 +54,21 @@ export default function SqlEditor({
         ? javascript()
         : sql({ dialect: SQL_DIALECTS[driver], upperCaseKeywords: true }),
       autocompletion({ override: [source] }),
-      keymap.of([
-        {
-          key: "Mod-Enter",
-          run: () => {
-            onRun();
-            return true;
+      Prec.highest(
+        keymap.of([
+          {
+            key: "Mod-Enter",
+            run: () => {
+              onRun();
+              return true;
+            },
           },
-        },
-      ]),
+          {
+            key: "Tab",
+            run: acceptCompletion,
+          },
+        ]),
+      ),
     ];
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [driver, terms]);
