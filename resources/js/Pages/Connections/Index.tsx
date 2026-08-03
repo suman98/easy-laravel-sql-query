@@ -1,6 +1,7 @@
 import { Link } from "@inertiajs/react";
 import { Plus, DatabaseZap } from "lucide-react";
 import Brand from "@/components/Brand";
+import ThemeToggle from "@/components/ThemeToggle";
 import ConnectionsGrid from "@/components/ConnectionsGrid";
 import type { ConnectionRecord } from "@/lib/clientTypes";
 
@@ -10,6 +11,7 @@ export default function Index({ connections }: { connections: ConnectionRecord[]
       <header className="sticky top-0 z-10 border-b border-zinc-200/80 bg-white/80 px-6 py-3.5 backdrop-blur-md dark:border-zinc-800/80 dark:bg-zinc-950/80">
         <div className="mx-auto flex w-full max-w-5xl items-center justify-between">
           <Brand />
+          <ThemeToggle />
         </div>
       </header>
 

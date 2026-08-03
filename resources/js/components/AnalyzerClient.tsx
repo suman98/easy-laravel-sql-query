@@ -23,9 +23,11 @@ import TableBrowser from "@/components/TableBrowser";
 import SavedQueriesPanel from "@/components/SavedQueriesPanel";
 import ConfirmWriteDialog from "@/components/ConfirmWriteDialog";
 import Brand from "@/components/Brand";
+import ThemeToggle from "@/components/ThemeToggle";
 import { DRIVER_META } from "@/lib/driverMeta";
 import { toMarkdownTable, toJsonRows } from "@/lib/markdown";
 import { apiUrl } from "@/lib/api";
+import { copyToClipboard } from "@/lib/clipboard";
 import type {
   ConnectionRecord,
   SavedQueryRecord,
@@ -171,7 +173,7 @@ export default function AnalyzerClient({
 
   async function handleCopy(format: "markdown" | "json") {
     const text = format === "markdown" ? toMarkdownTable(columns, rows) : toJsonRows(columns, rows);
-    await navigator.clipboard.writeText(text);
+    await copyToClipboard(text);
     setCopyMenuOpen(false);
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
@@ -210,12 +212,15 @@ export default function AnalyzerClient({
           </h1>
         </div>
 
-        <span
-          className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${meta.badgeClass}`}
-        >
-          <DriverIcon className="h-3.5 w-3.5" strokeWidth={2.25} />
-          {meta.label}
-        </span>
+        <div className="flex items-center gap-2">
+          <span
+            className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${meta.badgeClass}`}
+          >
+            <DriverIcon className="h-3.5 w-3.5" strokeWidth={2.25} />
+            {meta.label}
+          </span>
+          <ThemeToggle />
+        </div>
       </header>
 
       <div className="flex flex-1 overflow-hidden">
