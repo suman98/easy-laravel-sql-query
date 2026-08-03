@@ -36,8 +36,8 @@ export default function ConfirmWriteDialog({
             </h2>
             <p className="mt-1.5 text-sm text-zinc-600 dark:text-zinc-400">
               {isDdl
-                ? "This statement alters or drops database structure (CREATE/ALTER/DROP/TRUNCATE/RENAME) and cannot be undone. Are you sure you want to run it?"
-                : "This statement modifies data (INSERT/UPDATE/DELETE/REPLACE). Are you sure you want to run it?"}
+                ? "This statement alters or drops database structure and cannot be undone. Are you sure you want to run it?"
+                : "This statement modifies data. Are you sure you want to run it?"}
             </p>
           </div>
         </div>

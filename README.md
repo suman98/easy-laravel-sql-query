@@ -1,6 +1,6 @@
 # SQL Query
 
-Web-based SQL client. Connect to MySQL, PostgreSQL, or SQLite databases, browse schema, run queries, and export results — all from the browser.
+Web-based database client. Connect to MySQL, PostgreSQL, SQLite, or MongoDB, browse schema, run queries, and export results — all from the browser.
 
 ## Stack
 
@@ -9,15 +9,15 @@ Single Laravel app using [Inertia.js](https://inertiajs.com) + React for the fro
 - **Backend:** Laravel 13, PHP 8.3+
 - **Frontend:** React 19 + TypeScript, driven by Inertia (`resources/js/`)
 - **Styling:** Tailwind CSS 4
-- **Editor:** CodeMirror 6 (SQL syntax highlighting + autocomplete)
-- **DB drivers:** MySQL, PostgreSQL, SQLite via PDO
+- **Editor:** CodeMirror 6 (SQL syntax highlighting for SQL drivers, JS-mode highlighting for Mongo shell syntax)
+- **DB drivers:** MySQL, PostgreSQL, SQLite via PDO; MongoDB via `mongodb/mongodb`
 
 ## Features
 
 - Connect to multiple databases at once; credentials encrypted at rest
-- Table browser with schema + index inspection
-- SQL editor with autocomplete (keywords, tables, columns)
-- Run arbitrary SQL with a confirmation gate for write/DDL statements
+- Table/collection browser with schema + index inspection
+- Query editor with autocomplete (keywords, tables/collections, columns/fields)
+- Run arbitrary queries with a confirmation gate for write/DDL statements
 - Export query results as CSV or Markdown; copy as Markdown or JSON
 - Save and reuse queries per connection
 
@@ -38,6 +38,23 @@ php artisan serve
 ```
 
 Visit `/connections` to add your first database.
+
+### MongoDB support
+
+Requires the native `mongodb` PHP extension (`pecl install mongodb`, or via your platform's package manager) — the `mongodb/mongodb` composer package alone isn't enough, it wraps the extension.
+
+The query editor for a Mongo connection accepts `mongosh`-style shell syntax, not SQL:
+
+```js
+db.users.find({ status: "A" }, { name: 1 }).sort({ name: 1 }).limit(20)
+db.orders.find({ _id: ObjectId("64b64f9e2f8b9a0012345678") })
+db.users.updateOne({ _id: ObjectId("...") }, { $set: { status: "B" } })
+db.sales.aggregate([{ $match: { status: "A" } }, { $group: { _id: "$cust", total: { $sum: "$amount" } } }])
+```
+
+Supported methods: `find`, `findOne`, `aggregate`, `countDocuments`, `estimatedDocumentCount`, `distinct`, `insertOne`, `insertMany`, `updateOne`, `updateMany`, `replaceOne`, `deleteOne`, `deleteMany`, `drop`, plus chained `.limit()`/`.skip()`/`.sort()` on `find()`. `ObjectId("...")` and `ISODate("...")`/`new Date("...")` literals are supported.
+
+Caveats: the query text is parsed with a lightweight JS-object parser (`App\Support\MongoQueryParser`), not a full JS engine — stick to standard filter/update syntax; avoid JS expressions, variables, or comments inside the query. Auth defaults to `authSource=<database>` (the connection's target database), matching how most self-hosted Mongo users are created; there's no field in the connection form to override it.
 
 ### Dev workflow
 

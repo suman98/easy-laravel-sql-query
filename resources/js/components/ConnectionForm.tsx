@@ -4,8 +4,8 @@ import { AlertCircle, Loader2, Lock, ShieldCheck } from "lucide-react";
 import { DRIVER_META } from "@/lib/driverMeta";
 import type { ConnectionRecord, Driver } from "@/lib/clientTypes";
 
-const DEFAULT_PORTS: Record<Driver, number> = { mysql: 3306, pgsql: 5432, sqlite: 0 };
-const DRIVERS: Driver[] = ["mysql", "pgsql", "sqlite"];
+const DEFAULT_PORTS: Record<Driver, number> = { mysql: 3306, pgsql: 5432, sqlite: 0, mongodb: 27017 };
+const DRIVERS: Driver[] = ["mysql", "pgsql", "sqlite", "mongodb"];
 
 export default function ConnectionForm({
   existing,
@@ -23,6 +23,7 @@ export default function ConnectionForm({
     ssl: existing?.ssl ?? false,
     filePath: existing?.filePath ?? "",
   });
+  const formError = (errors as Record<string, string | undefined>).error;
 
   function handleDriverChange(next: Driver) {
     setData((prev) => ({
@@ -44,7 +45,7 @@ export default function ConnectionForm({
   return (
     <form onSubmit={handleSubmit} className="card animate-slide-up flex max-w-xl flex-col gap-5 p-6">
       <AnimatePresence>
-        {errors.error && (
+        {formError && (
           <motion.div
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
@@ -52,7 +53,7 @@ export default function ConnectionForm({
             className="flex items-start gap-2 overflow-hidden rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/60 dark:text-red-300"
           >
             <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-            <span>{errors.error}</span>
+            <span>{formError}</span>
           </motion.div>
         )}
       </AnimatePresence>
@@ -68,7 +69,7 @@ export default function ConnectionForm({
       </Field>
 
       <Field label="Driver">
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-4 gap-2">
           {DRIVERS.map((d) => {
             const meta = DRIVER_META[d];
             const Icon = meta.icon;

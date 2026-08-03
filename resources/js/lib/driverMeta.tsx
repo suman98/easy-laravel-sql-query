@@ -1,4 +1,4 @@
-import { Database, HardDrive } from "lucide-react";
+import { Database, HardDrive, Leaf } from "lucide-react";
 import type { Driver } from "@/lib/clientTypes";
 
 export const DRIVER_META: Record<
@@ -29,5 +29,12 @@ export const DRIVER_META: Record<
     badgeClass:
       "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300",
     glowClass: "from-emerald-500/20",
+  },
+  mongodb: {
+    label: "MongoDB",
+    icon: Leaf,
+    badgeClass:
+      "bg-green-100 text-green-700 dark:bg-green-500/15 dark:text-green-300",
+    glowClass: "from-green-500/20",
   },
 };

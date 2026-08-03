@@ -39,7 +39,7 @@ class ConnectionController extends Controller
         if (! trim((string) ($data['name'] ?? ''))) {
             return back()->withErrors(['error' => 'Name is required.']);
         }
-        if (! in_array($data['driver'] ?? null, ['mysql', 'pgsql', 'sqlite'], true)) {
+        if (! in_array($data['driver'] ?? null, ['mysql', 'pgsql', 'sqlite', 'mongodb'], true)) {
             return back()->withErrors(['error' => 'Invalid driver.']);
         }
         if ($data['driver'] === 'sqlite' && ! trim((string) ($data['filePath'] ?? ''))) {

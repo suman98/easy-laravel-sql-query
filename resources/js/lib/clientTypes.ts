@@ -1,4 +1,4 @@
-export type Driver = "mysql" | "pgsql" | "sqlite";
+export type Driver = "mysql" | "pgsql" | "sqlite" | "mongodb";
 
 export interface ConnectionRecord {
   id: number;

@@ -1,12 +1,13 @@
 import { useMemo } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { sql, MySQL, PostgreSQL, SQLite } from "@codemirror/lang-sql";
+import { javascript } from "@codemirror/lang-javascript";
 import { autocompletion, type CompletionContext, type CompletionResult } from "@codemirror/autocomplete";
 import { keymap } from "@codemirror/view";
 import type { Driver } from "@/lib/clientTypes";
 import type { AutocompleteTerm } from "@/lib/clientTypes";
 
-const DIALECTS: Record<Driver, typeof MySQL> = {
+const SQL_DIALECTS: Partial<Record<Driver, typeof MySQL>> = {
   mysql: MySQL,
   pgsql: PostgreSQL,
   sqlite: SQLite,
@@ -43,7 +44,9 @@ export default function SqlEditor({
     };
 
     return [
-      sql({ dialect: DIALECTS[driver], upperCaseKeywords: true }),
+      driver === "mongodb"
+        ? javascript()
+        : sql({ dialect: SQL_DIALECTS[driver], upperCaseKeywords: true }),
       autocompletion({ override: [source] }),
       keymap.of([
         {
@@ -65,7 +68,7 @@ export default function SqlEditor({
         <span className="h-2.5 w-2.5 rounded-full bg-amber-500/70" />
         <span className="h-2.5 w-2.5 rounded-full bg-emerald-500/70" />
         <span className="ml-2 font-mono text-[10px] uppercase tracking-wider text-zinc-500">
-          {driver}.sql
+          {driver === "mongodb" ? "mongo.js" : `${driver}.sql`}
         </span>
       </div>
       <CodeMirror

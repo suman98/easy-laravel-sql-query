@@ -34,6 +34,7 @@ class AdapterFactory
             'pgsql' => new PostgresAdapter($connection, $password),
             'mysql' => new MysqlAdapter($connection, $password),
             'sqlite' => new SqliteAdapter($connection),
+            'mongodb' => new MongoAdapter($connection, $password),
             default => throw new RuntimeException("Unsupported driver: {$connection->driver}"),
         };
     }

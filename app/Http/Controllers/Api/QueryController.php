@@ -6,6 +6,7 @@ use App\DbAdapters\AdapterFactory;
 use App\Http\Controllers\Controller;
 use App\Models\Connection;
 use App\Support\Exporter;
+use App\Support\MongoQueryParser;
 use App\Support\ResultSerializer;
 use App\Support\SqlUtils;
 use Illuminate\Http\Request;
@@ -22,19 +23,25 @@ class QueryController extends Controller
             return response()->json(['error' => 'Query is empty.'], 400);
         }
 
-        $isWrite = SqlUtils::isWriteQuery($sql);
+        $isMongo = $connection->driver === 'mongodb';
+        $isWrite = $isMongo ? MongoQueryParser::isWriteQuery($sql) : SqlUtils::isWriteQuery($sql);
         $confirmWrite = (bool) $request->input('confirmWrite', false);
 
         if ($isWrite && ! $confirmWrite) {
             return response()->json([
                 'needsConfirm' => true,
                 'isWriteQuery' => true,
-                'isDdl' => SqlUtils::isDdlQuery($sql),
+                'isDdl' => $isMongo ? MongoQueryParser::isDdlQuery($sql) : SqlUtils::isDdlQuery($sql),
             ]);
         }
 
         $limit = max(1, min((int) $request->input('limit', 200), 1000));
-        $finalSql = $isWrite ? SqlUtils::stripTrailing($sql) : SqlUtils::injectLimit($sql, $limit);
+
+        if ($isMongo) {
+            $finalSql = $isWrite ? MongoQueryParser::stripTrailing($sql) : MongoQueryParser::injectLimit($sql, $limit);
+        } else {
+            $finalSql = $isWrite ? SqlUtils::stripTrailing($sql) : SqlUtils::injectLimit($sql, $limit);
+        }
 
         $adapter = $this->adapters->make($connection);
 
@@ -69,8 +76,9 @@ class QueryController extends Controller
         }
 
         $terms = [];
+        $keywords = $connection->driver === 'mongodb' ? MongoQueryParser::METHOD_NAMES : SqlUtils::SQL_KEYWORDS;
 
-        foreach (SqlUtils::SQL_KEYWORDS as $keyword) {
+        foreach ($keywords as $keyword) {
             $terms[] = ['value' => $keyword, 'type' => 'keyword'];
         }
 
@@ -93,15 +101,23 @@ class QueryController extends Controller
             return response()->json(['error' => 'Query is empty.'], 400);
         }
 
-        if (SqlUtils::isWriteQuery($sql)) {
-            return response()->json(['error' => 'Only SELECT queries can be exported.'], 400);
+        $isWrite = $connection->driver === 'mongodb'
+            ? MongoQueryParser::isWriteQuery($sql)
+            : SqlUtils::isWriteQuery($sql);
+
+        if ($isWrite) {
+            return response()->json(['error' => 'Only read queries can be exported.'], 400);
         }
 
         $format = $request->input('format', 'csv');
         $adapter = $this->adapters->make($connection);
 
+        $finalSql = $connection->driver === 'mongodb'
+            ? MongoQueryParser::stripTrailing($sql)
+            : SqlUtils::stripTrailing($sql);
+
         try {
-            $result = $adapter->query(SqlUtils::stripTrailing($sql));
+            $result = $adapter->query($finalSql);
         } catch (\Throwable $e) {
             return response()->json(['error' => $e->getMessage()], 400);
         }
