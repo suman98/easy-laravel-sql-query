@@ -22,7 +22,7 @@ function sortConnections(connections: ConnectionRecord[], sortBy: SortKey): Conn
   const sorted = [...connections];
   switch (sortBy) {
     case "custom":
-      return sorted.sort((a, b) => a.position - b.position);
+      return sorted;
     case "name":
       return sorted.sort((a, b) => a.name.localeCompare(b.name));
     case "driver":
@@ -46,7 +46,8 @@ export default function Index({ connections }: { connections: ConnectionRecord[]
   const sorted = useMemo(() => sortConnections(items, sortBy), [items, sortBy]);
 
   function handleReorder(next: ConnectionRecord[]) {
-    setItems(next);
+    const repositioned = next.map((c, i) => ({ ...c, position: i }));
+    setItems(repositioned);
     fetch(apiUrl("/connections/reorder"), {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
