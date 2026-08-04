@@ -6,6 +6,10 @@ import type { ConnectionRecord, Driver } from "@/lib/clientTypes";
 
 const DEFAULT_PORTS: Record<Driver, number> = { mysql: 3306, pgsql: 5432, sqlite: 0, mongodb: 27017 };
 const DRIVERS: Driver[] = ["mysql", "pgsql", "sqlite", "mongodb"];
+const COLOR_SWATCHES = [
+  "#ef4444", "#f97316", "#eab308", "#22c55e",
+  "#14b8a6", "#3b82f6", "#8b5cf6", "#ec4899",
+];
 
 export default function ConnectionForm({
   existing,
@@ -22,6 +26,8 @@ export default function ConnectionForm({
     password: "",
     ssl: existing?.ssl ?? false,
     filePath: existing?.filePath ?? "",
+    color: existing?.color ?? "",
+    createDatabase: false,
   });
   const formError = (errors as Record<string, string | undefined>).error;
 
@@ -93,6 +99,46 @@ export default function ConnectionForm({
         </div>
       </Field>
 
+      <Field label="Card color">
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setData("color", "")}
+            className={`flex h-7 w-7 items-center justify-center rounded-full border-2 text-[10px] text-zinc-400 ${
+              !data.color
+                ? "border-indigo-500"
+                : "border-transparent hover:border-zinc-300 dark:hover:border-zinc-600"
+            }`}
+            style={{
+              backgroundImage:
+                "linear-gradient(45deg, transparent 45%, currentColor 45%, currentColor 55%, transparent 55%)",
+            }}
+            title="No color"
+          />
+          {COLOR_SWATCHES.map((c) => (
+            <button
+              key={c}
+              type="button"
+              onClick={() => setData("color", c)}
+              className={`h-7 w-7 rounded-full border-2 transition-transform ${
+                data.color === c
+                  ? "border-indigo-500 scale-110"
+                  : "border-transparent hover:scale-105"
+              }`}
+              style={{ backgroundColor: c }}
+              title={c}
+            />
+          ))}
+          <input
+            type="color"
+            value={data.color || "#71717a"}
+            onChange={(e) => setData("color", e.target.value)}
+            className="h-7 w-7 cursor-pointer rounded-full border border-zinc-200 bg-transparent p-0 dark:border-zinc-700"
+            title="Custom color"
+          />
+        </div>
+      </Field>
+
       <AnimatePresence mode="wait">
         {data.driver === "sqlite" ? (
           <motion.div
@@ -149,6 +195,18 @@ export default function ConnectionForm({
                 required
               />
             </Field>
+
+            {!existing && (data.driver === "mysql" || data.driver === "pgsql") && (
+              <label className="flex cursor-pointer items-center gap-2 text-sm text-zinc-700 dark:text-zinc-300">
+                <input
+                  type="checkbox"
+                  checked={data.createDatabase}
+                  onChange={(e) => setData("createDatabase", e.target.checked)}
+                  className="h-4 w-4 rounded border-zinc-300 text-indigo-600 focus:ring-indigo-500 dark:border-zinc-600"
+                />
+                Create this database if it doesn&apos;t exist
+              </label>
+            )}
 
             <div className="flex gap-3">
               <Field label="Username" className="flex-1">

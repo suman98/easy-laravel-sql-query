@@ -18,6 +18,8 @@ class Connection extends Model
         'password_encrypted',
         'ssl',
         'file_path',
+        'color',
+        'position',
     ];
 
     protected $hidden = [

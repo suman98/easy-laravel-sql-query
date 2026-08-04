@@ -28,6 +28,7 @@ import { DRIVER_META } from "@/lib/driverMeta";
 import { toMarkdownTable, toJsonRows } from "@/lib/markdown";
 import { apiUrl } from "@/lib/api";
 import { copyToClipboard } from "@/lib/clipboard";
+import { loadQueryDraft, saveQueryDraft } from "@/lib/queryDraft";
 import type {
   ConnectionRecord,
   SavedQueryRecord,
@@ -49,7 +50,7 @@ export default function AnalyzerClient({
   connection: ConnectionRecord;
   initialSavedQueries: SavedQueryRecord[];
 }) {
-  const [sql, setSql] = useState("");
+  const [sql, setSql] = useState(() => loadQueryDraft(connection.id));
   const [limit, setLimit] = useState(200);
   const [panel, setPanel] = useState<Panel>("editor");
   const [terms, setTerms] = useState<AutocompleteTerm[]>([]);
@@ -69,6 +70,7 @@ export default function AnalyzerClient({
   const [copied, setCopied] = useState(false);
   const [copyMenuOpen, setCopyMenuOpen] = useState(false);
   const copyMenuRef = useRef<HTMLDivElement>(null);
+  const draftConnectionId = useRef(connection.id);
 
   const meta = DRIVER_META[connection.driver];
   const DriverIcon = meta.icon;
@@ -82,6 +84,19 @@ export default function AnalyzerClient({
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  // Swap in the draft belonging to the new connection before persisting again.
+  useEffect(() => {
+    if (draftConnectionId.current === connection.id) return;
+    draftConnectionId.current = connection.id;
+    setSql(loadQueryDraft(connection.id));
+  }, [connection.id]);
+
+  useEffect(() => {
+    if (draftConnectionId.current !== connection.id) return;
+    const timer = setTimeout(() => saveQueryDraft(connection.id, sql), 300);
+    return () => clearTimeout(timer);
+  }, [connection.id, sql]);
 
   useEffect(() => {
     fetch(apiUrl(`/connections/${connection.id}/autocomplete`))

@@ -22,6 +22,8 @@ class ConnectionResource extends JsonResource
             'username' => $this->username,
             'ssl' => $this->ssl,
             'filePath' => $this->file_path,
+            'color' => $this->color,
+            'position' => $this->position,
             'created_at' => $this->created_at?->toISOString(),
         ];
     }

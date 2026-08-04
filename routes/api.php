@@ -2,7 +2,10 @@
 
 use App\Http\Controllers\Api\QueryController;
 use App\Http\Controllers\Api\SavedQueryController;
+use App\Http\Controllers\ConnectionController;
 use Illuminate\Support\Facades\Route;
+
+Route::put('connections/reorder', [ConnectionController::class, 'reorder']);
 
 Route::prefix('connections/{connection}')->group(function () {
     Route::post('query', [QueryController::class, 'run']);

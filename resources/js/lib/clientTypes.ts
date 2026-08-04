@@ -10,6 +10,8 @@ export interface ConnectionRecord {
   username: string | null;
   ssl: boolean;
   filePath: string | null;
+  color: string | null;
+  position: number;
   created_at: string;
 }
 
