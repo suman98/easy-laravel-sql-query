@@ -212,7 +212,24 @@ export default function AnalyzerClient({
         )}
       </AnimatePresence>
 
-      <header className="flex items-center justify-between border-b border-zinc-200/80 bg-white/80 px-5 py-3 backdrop-blur-md dark:border-zinc-800/80 dark:bg-zinc-950/80">
+      <header
+        className="relative flex items-center justify-between border-b border-zinc-200/80 bg-white/80 px-5 py-3 backdrop-blur-md dark:border-zinc-800/80 dark:bg-zinc-950/80"
+        style={
+          connection.color
+            ? {
+                backgroundImage: `linear-gradient(${connection.color}14, ${connection.color}14)`,
+                borderBottomColor: `${connection.color}59`,
+              }
+            : undefined
+        }
+      >
+        {connection.color && (
+          <span
+            aria-hidden
+            className="absolute inset-x-0 top-0 h-0.5"
+            style={{ backgroundColor: connection.color }}
+          />
+        )}
         <div className="flex items-center gap-2.5">
           <Brand href="/connections" />
           <ChevronRight className="h-3.5 w-3.5 text-zinc-300 dark:text-zinc-700" />
@@ -223,7 +240,14 @@ export default function AnalyzerClient({
             Databases
           </Link>
           <ChevronRight className="h-3.5 w-3.5 text-zinc-300 dark:text-zinc-700" />
-          <h1 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+          <h1 className="flex items-center gap-1.5 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+            {connection.color && (
+              <span
+                className="h-2 w-2 shrink-0 rounded-full ring-1 ring-black/10 dark:ring-white/15"
+                style={{ backgroundColor: connection.color }}
+                title={connection.color}
+              />
+            )}
             {connection.name}
           </h1>
         </div>
