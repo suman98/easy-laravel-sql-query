@@ -1,5 +1,8 @@
 import { useState } from "react";
-import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react";
+import { AnimatePresence } from "framer-motion";
+import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Eye } from "lucide-react";
+import JsonViewerDialog from "@/components/JsonViewerDialog";
+import { asJsonValue, jsonSummary, truncate } from "@/lib/jsonCell";
 
 const PAGE_SIZE = 50;
 
@@ -18,6 +21,7 @@ export default function ResultsTable({
 }) {
   const [page, setPage] = useState(1);
   const [trackedRows, setTrackedRows] = useState(rows);
+  const [viewing, setViewing] = useState<{ column: string; value: unknown } | null>(null);
 
   if (rows !== trackedRows) {
     setTrackedRows(rows);
@@ -61,6 +65,7 @@ export default function ResultsTable({
               >
                 {row.map((cell, ci) => {
                   const { text, isNull } = formatCell(cell);
+                  const json = asJsonValue(cell);
                   return (
                     <td
                       key={ci}
@@ -70,7 +75,25 @@ export default function ResultsTable({
                           : "text-zinc-800 dark:text-zinc-200"
                       }`}
                     >
-                      {text}
+                      {json ? (
+                        <span className="flex items-center gap-2">
+                          <span
+                            className="text-zinc-500 dark:text-zinc-400"
+                            title={jsonSummary(json)}
+                          >
+                            {truncate(text)}
+                          </span>
+                          <button
+                            onClick={() => setViewing({ column: columns[ci], value: json })}
+                            className="inline-flex shrink-0 items-center gap-1 rounded border border-zinc-200 px-1.5 py-0.5 text-[10px] font-medium text-indigo-600 transition-colors hover:border-indigo-300 hover:bg-indigo-50 dark:border-zinc-800 dark:text-indigo-400 dark:hover:border-indigo-500/40 dark:hover:bg-indigo-500/10"
+                          >
+                            <Eye className="h-3 w-3" />
+                            View
+                          </button>
+                        </span>
+                      ) : (
+                        text
+                      )}
                     </td>
                   );
                 })}
@@ -120,6 +143,16 @@ export default function ResultsTable({
           </div>
         </div>
       )}
+
+      <AnimatePresence>
+        {viewing && (
+          <JsonViewerDialog
+            column={viewing.column}
+            value={viewing.value}
+            onClose={() => setViewing(null)}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }

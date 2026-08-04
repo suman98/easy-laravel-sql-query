@@ -10,6 +10,7 @@ import {
   ClipboardCheck,
   Code2,
   Download,
+  Eraser,
   FileDown,
   FileJson,
   Loader2,
@@ -331,6 +332,16 @@ export default function AnalyzerClient({
               <kbd className="ml-1 rounded bg-white/20 px-1.5 py-0.5 text-[10px] font-normal">
                 ⌘⏎
               </kbd>
+            </button>
+
+            <button
+              onClick={() => setSql("")}
+              disabled={running || !sql}
+              className="btn-secondary"
+              title="Clear editor"
+            >
+              <Eraser className="h-3.5 w-3.5" />
+              Clear
             </button>
 
             <label className="flex items-center gap-1.5 text-sm text-zinc-600 dark:text-zinc-400">
