@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useRef, useState } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { sql, MySQL, PostgreSQL, SQLite } from "@codemirror/lang-sql";
 import { javascript } from "@codemirror/lang-javascript";
@@ -8,7 +8,7 @@ import {
   type CompletionContext,
   type CompletionResult,
 } from "@codemirror/autocomplete";
-import { keymap } from "@codemirror/view";
+import { EditorView, keymap } from "@codemirror/view";
 import { Prec } from "@codemirror/state";
 import type { Driver } from "@/lib/clientTypes";
 import type { AutocompleteTerm } from "@/lib/clientTypes";
@@ -25,6 +25,7 @@ export default function SqlEditor({
   driver,
   terms,
   onRun,
+  onSelectionChange,
   disabled,
 }: {
   value: string;
@@ -32,8 +33,18 @@ export default function SqlEditor({
   driver: Driver;
   terms: AutocompleteTerm[];
   onRun: () => void;
+  onSelectionChange?: (selected: string) => void;
   disabled?: boolean;
 }) {
+  // Extensions are built once per driver/terms, so read the latest callbacks
+  // through refs instead of capturing them in the memo.
+  const onRunRef = useRef(onRun);
+  onRunRef.current = onRun;
+  const onSelectionChangeRef = useRef(onSelectionChange);
+  onSelectionChangeRef.current = onSelectionChange;
+
+  const [selectedLength, setSelectedLength] = useState(0);
+
   const extensions = useMemo(() => {
     const source = (context: CompletionContext): CompletionResult | null => {
       const word = context.matchBefore(/[\w]*/);
@@ -54,12 +65,22 @@ export default function SqlEditor({
         ? javascript()
         : sql({ dialect: SQL_DIALECTS[driver], upperCaseKeywords: true }),
       autocompletion({ override: [source] }),
+      EditorView.updateListener.of((update) => {
+        if (!update.selectionSet && !update.docChanged) return;
+        const { state } = update;
+        const selected = state.selection.ranges
+          .filter((r) => !r.empty)
+          .map((r) => state.sliceDoc(r.from, r.to))
+          .join("\n");
+        onSelectionChangeRef.current?.(selected);
+        setSelectedLength(selected.trim().length);
+      }),
       Prec.highest(
         keymap.of([
           {
             key: "Mod-Enter",
             run: () => {
-              onRun();
+              onRunRef.current();
               return true;
             },
           },
@@ -82,6 +103,11 @@ export default function SqlEditor({
         <span className="ml-2 font-mono text-[10px] uppercase tracking-wider text-zinc-500">
           {driver === "mongodb" ? "mongo.js" : `${driver}.sql`}
         </span>
+        {selectedLength > 0 && (
+          <span className="ml-auto rounded-full bg-indigo-500/15 px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-indigo-400">
+            Selection · {selectedLength} chars
+          </span>
+        )}
       </div>
       <CodeMirror
         value={value}

@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\QueryController;
+use App\Http\Controllers\Api\QueryHistoryController;
 use App\Http\Controllers\Api\SavedQueryController;
 use App\Http\Controllers\ConnectionController;
 use Illuminate\Support\Facades\Route;
@@ -17,4 +18,8 @@ Route::prefix('connections/{connection}')->group(function () {
     Route::get('saved-queries', [SavedQueryController::class, 'index']);
     Route::post('saved-queries', [SavedQueryController::class, 'store']);
     Route::delete('saved-queries/{savedQuery}', [SavedQueryController::class, 'destroy']);
+
+    Route::get('history', [QueryHistoryController::class, 'index']);
+    Route::delete('history', [QueryHistoryController::class, 'clear']);
+    Route::delete('history/{queryHistory}', [QueryHistoryController::class, 'destroy']);
 });

@@ -17,11 +17,13 @@ import {
   Play,
   Table2,
   Bookmark,
+  History,
 } from "lucide-react";
 import SqlEditor from "@/components/SqlEditor";
 import ResultsTable from "@/components/ResultsTable";
 import TableBrowser from "@/components/TableBrowser";
 import SavedQueriesPanel from "@/components/SavedQueriesPanel";
+import HistoryPanel from "@/components/HistoryPanel";
 import ConfirmWriteDialog from "@/components/ConfirmWriteDialog";
 import Brand from "@/components/Brand";
 import ThemeToggle from "@/components/ThemeToggle";
@@ -33,29 +35,35 @@ import { loadQueryDraft, saveQueryDraft } from "@/lib/queryDraft";
 import type {
   ConnectionRecord,
   SavedQueryRecord,
+  QueryHistoryRecord,
   AutocompleteTerm,
 } from "@/lib/clientTypes";
 
-type Panel = "editor" | "tables" | "saved";
+type Panel = "editor" | "tables" | "saved" | "history";
 
 const PANELS: { key: Panel; label: string; icon: typeof Code2 }[] = [
   { key: "editor", label: "Editor", icon: Code2 },
   { key: "tables", label: "Tables", icon: Table2 },
   { key: "saved", label: "Saved", icon: Bookmark },
+  { key: "history", label: "History", icon: History },
 ];
 
 export default function AnalyzerClient({
   connection,
   initialSavedQueries,
+  initialQueryHistory,
 }: {
   connection: ConnectionRecord;
   initialSavedQueries: SavedQueryRecord[];
+  initialQueryHistory: QueryHistoryRecord[];
 }) {
   const [sql, setSql] = useState(() => loadQueryDraft(connection.id));
+  const [selectedSql, setSelectedSql] = useState("");
   const [limit, setLimit] = useState(200);
   const [panel, setPanel] = useState<Panel>("editor");
   const [terms, setTerms] = useState<AutocompleteTerm[]>([]);
   const [savedQueries, setSavedQueries] = useState(initialSavedQueries);
+  const [queryHistory, setQueryHistory] = useState(initialQueryHistory);
 
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -106,8 +114,22 @@ export default function AnalyzerClient({
       .catch(() => {});
   }, [connection.id]);
 
-  async function runQuery(confirmWrite = false) {
-    const trimmed = sql.trim();
+  // Highlighting part of the editor scopes every action to that selection.
+  const activeSql = selectedSql.trim() || sql.trim();
+  const runningSelection = selectedSql.trim().length > 0;
+
+  async function refreshHistory() {
+    try {
+      const res = await fetch(apiUrl(`/connections/${connection.id}/history`));
+      const data = await res.json();
+      if (res.ok) setQueryHistory(data.history ?? []);
+    } catch {
+      // ignore
+    }
+  }
+
+  async function runQuery(confirmWrite = false, overrideSql?: string) {
+    const trimmed = (overrideSql ?? activeSql).trim();
     if (!trimmed) {
       setError("Query is empty.");
       return;
@@ -150,6 +172,7 @@ export default function AnalyzerClient({
       }
     } finally {
       setRunning(false);
+      refreshHistory();
     }
   }
 
@@ -158,8 +181,15 @@ export default function AnalyzerClient({
     runQuery(true);
   }
 
+  function runFromHistory(historySql: string) {
+    setSelectedSql("");
+    setSql(historySql);
+    setPanel("editor");
+    runQuery(false, historySql);
+  }
+
   async function handleExport(format: "csv" | "markdown") {
-    const trimmed = sql.trim();
+    const trimmed = activeSql;
     if (!trimmed) return;
     setExporting(true);
     try {
@@ -272,14 +302,17 @@ export default function AnalyzerClient({
                 <button
                   key={key}
                   onClick={() => setPanel(key)}
-                  className={`relative flex flex-1 items-center justify-center gap-1.5 px-3 py-2.5 text-sm transition-colors ${
+                  aria-label={label}
+                  className={`group relative flex flex-1 items-center justify-center px-3 py-2.5 transition-colors ${
                     active
-                      ? "font-medium text-zinc-900 dark:text-zinc-100"
+                      ? "text-zinc-900 dark:text-zinc-100"
                       : "text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"
                   }`}
                 >
-                  <Icon className="h-3.5 w-3.5" strokeWidth={2.25} />
-                  {label}
+                  <Icon className="h-4 w-4" strokeWidth={2.25} />
+                  <span className="pointer-events-none absolute top-full z-20 mt-1.5 whitespace-nowrap rounded-md bg-zinc-900 px-2 py-1 text-[11px] font-medium text-white opacity-0 shadow-md transition-opacity delay-300 duration-100 group-hover:opacity-100 dark:bg-zinc-100 dark:text-zinc-900">
+                    {label}
+                  </span>
                   {active && (
                     <motion.span
                       layoutId="tab-indicator"
@@ -321,6 +354,21 @@ export default function AnalyzerClient({
                     }
                   />
                 )}
+                {panel === "history" && (
+                  <HistoryPanel
+                    connectionId={connection.id}
+                    history={queryHistory}
+                    onLoad={(q) => {
+                      setSql(q);
+                      setPanel("editor");
+                    }}
+                    onRun={runFromHistory}
+                    onDeleted={(id) =>
+                      setQueryHistory((prev) => prev.filter((h) => h.id !== id))
+                    }
+                    onCleared={() => setQueryHistory([])}
+                  />
+                )}
                 {panel === "editor" && (
                   <div className="text-sm leading-relaxed text-zinc-500 dark:text-zinc-400">
                     Write SQL in the editor and run it. Switch to{" "}
@@ -342,6 +390,7 @@ export default function AnalyzerClient({
             driver={connection.driver}
             terms={terms}
             onRun={() => runQuery(false)}
+            onSelectionChange={setSelectedSql}
             disabled={running}
           />
 
@@ -352,7 +401,7 @@ export default function AnalyzerClient({
               ) : (
                 <Play className="h-4 w-4" strokeWidth={2.25} fill="currentColor" />
               )}
-              {running ? "Running…" : "Run"}
+              {running ? "Running…" : runningSelection ? "Run Selection" : "Run"}
               <kbd className="ml-1 rounded bg-white/20 px-1.5 py-0.5 text-[10px] font-normal">
                 ⌘⏎
               </kbd>
@@ -384,7 +433,7 @@ export default function AnalyzerClient({
 
             <button
               onClick={() => handleExport("csv")}
-              disabled={exporting || !sql.trim()}
+              disabled={exporting || !activeSql}
               className="btn-secondary"
             >
               <Download className="h-3.5 w-3.5" />
@@ -393,7 +442,7 @@ export default function AnalyzerClient({
 
             <button
               onClick={() => handleExport("markdown")}
-              disabled={exporting || !sql.trim()}
+              disabled={exporting || !activeSql}
               className="btn-secondary"
             >
               <FileDown className="h-3.5 w-3.5" />

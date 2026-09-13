@@ -39,4 +39,9 @@ class Connection extends Model
     {
         return $this->hasMany(SavedQuery::class);
     }
+
+    public function queryHistory()
+    {
+        return $this->hasMany(QueryHistory::class);
+    }
 }

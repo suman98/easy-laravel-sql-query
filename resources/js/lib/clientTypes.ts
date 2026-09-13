@@ -49,6 +49,18 @@ export interface SavedQueryRecord {
   created_at: string;
 }
 
+export interface QueryHistoryRecord {
+  id: number;
+  connection_id: number;
+  sql: string;
+  is_write: boolean;
+  success: boolean;
+  error: string | null;
+  row_count: number | null;
+  execution_time: number | null;
+  created_at: string;
+}
+
 export interface AutocompleteTerm {
   value: string;
   type: "keyword" | "table" | "column";

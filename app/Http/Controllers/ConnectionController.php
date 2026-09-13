@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\DbAdapters\AdapterFactory;
 use App\Http\Resources\ConnectionResource;
+use App\Http\Resources\QueryHistoryResource;
 use App\Http\Resources\SavedQueryResource;
 use App\Models\Connection;
 use App\Services\CredentialCipher;
@@ -114,6 +115,9 @@ class ConnectionController extends Controller
             'connection' => new ConnectionResource($connection),
             'savedQueries' => SavedQueryResource::collection(
                 $connection->savedQueries()->orderByRaw('LOWER(name)')->get()
+            ),
+            'queryHistory' => QueryHistoryResource::collection(
+                $connection->queryHistory()->orderByDesc('created_at')->orderByDesc('id')->get()
             ),
         ]);
     }

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\DbAdapters\AdapterFactory;
 use App\Http\Controllers\Controller;
 use App\Models\Connection;
+use App\Models\QueryHistory;
 use App\Support\Exporter;
 use App\Support\MongoQueryParser;
 use App\Support\ResultSerializer;
@@ -50,10 +51,28 @@ class QueryController extends Controller
         try {
             $result = $adapter->query($finalSql);
         } catch (\Throwable $e) {
+            QueryHistory::record($connection->id, [
+                'sql' => $sql,
+                'is_write' => $isWrite,
+                'success' => false,
+                'error' => $e->getMessage(),
+                'row_count' => null,
+                'execution_time' => round((microtime(true) - $start) * 1000, 2),
+            ]);
+
             return response()->json(['error' => $e->getMessage()], 400);
         }
 
         $executionTime = (microtime(true) - $start) * 1000;
+
+        QueryHistory::record($connection->id, [
+            'sql' => $sql,
+            'is_write' => $isWrite,
+            'success' => true,
+            'error' => null,
+            'row_count' => $result['rowCount'],
+            'execution_time' => round($executionTime, 2),
+        ]);
 
         return response()->json([
             'columns' => $result['columns'],
