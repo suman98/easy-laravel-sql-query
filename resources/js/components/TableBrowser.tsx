@@ -30,6 +30,7 @@ export default function TableBrowser({
   const [schemaLoading, setSchemaLoading] = useState(false);
   const [copied, setCopied] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [copiedNameKey, setCopiedNameKey] = useState<string | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -78,6 +79,13 @@ export default function TableBrowser({
     } finally {
       setSchemaLoading(false);
     }
+  }
+
+  async function copyTableName(t: TableInfo, e: React.MouseEvent) {
+    e.stopPropagation();
+    await copyToClipboard(t.tableName);
+    setCopiedNameKey(t.tableKey);
+    setTimeout(() => setCopiedNameKey(null), 1200);
   }
 
   async function copySchema(t: TableInfo) {
@@ -164,6 +172,17 @@ export default function TableBrowser({
                     <span className="ml-auto w-16 shrink-0 text-right font-mono text-[11px] tabular-nums text-zinc-400">
                       {t.sizeHuman}
                     </span>
+                  </button>
+                  <button
+                    onClick={(e) => copyTableName(t, e)}
+                    title="Copy table name"
+                    className="shrink-0 rounded-md p-1 text-zinc-400 opacity-0 transition-all duration-150 hover:bg-zinc-200/60 hover:text-zinc-700 group-hover:opacity-100 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+                  >
+                    {copiedNameKey === t.tableKey ? (
+                      <ClipboardCheck className="h-3.5 w-3.5 text-emerald-500" />
+                    ) : (
+                      <Clipboard className="h-3.5 w-3.5" />
+                    )}
                   </button>
                   <button
                     onClick={() => onUseTable(t.tableName)}
