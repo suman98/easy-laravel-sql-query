@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\AiQueryController;
 use App\Http\Controllers\Api\QueryController;
 use App\Http\Controllers\Api\QueryHistoryController;
 use App\Http\Controllers\Api\SavedQueryController;
@@ -14,6 +15,7 @@ Route::prefix('connections/{connection}')->group(function () {
     Route::post('export', [QueryController::class, 'export']);
     Route::get('schema', [QueryController::class, 'schema']);
     Route::get('tables', [QueryController::class, 'tables']);
+    Route::post('ai/query', [AiQueryController::class, 'assist']);
 
     Route::get('saved-queries', [SavedQueryController::class, 'index']);
     Route::post('saved-queries', [SavedQueryController::class, 'store']);

@@ -16,9 +16,11 @@ import { copyToClipboard } from "@/lib/clipboard";
 export default function TableBrowser({
   connectionId,
   onUseTable,
+  onSelectTable,
 }: {
   connectionId: number;
   onUseTable: (tableName: string) => void;
+  onSelectTable?: (table: { tableName: string; tableSchema: string } | null) => void;
 }) {
   const [tables, setTables] = useState<TableInfo[]>([]);
   const [search, setSearch] = useState("");
@@ -55,12 +57,14 @@ export default function TableBrowser({
     if (selectedKey === t.tableKey) {
       setSelectedKey(null);
       setSchema(null);
+      onSelectTable?.(null);
       return;
     }
     setSelectedKey(t.tableKey);
     setSchema(null);
     setCopied(false);
     setSchemaLoading(true);
+    onSelectTable?.({ tableName: t.tableName, tableSchema: t.tableSchema });
     try {
       const res = await fetch(
         apiUrl(

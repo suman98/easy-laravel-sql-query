@@ -15,11 +15,12 @@ import {
   FileJson,
   Loader2,
   Play,
+  Sparkles,
   Table2,
   Bookmark,
   History,
 } from "lucide-react";
-import SqlEditor from "@/components/SqlEditor";
+import SqlEditor, { type SqlEditorHandle } from "@/components/SqlEditor";
 import ResultsTable from "@/components/ResultsTable";
 import TableBrowser from "@/components/TableBrowser";
 import SavedQueriesPanel from "@/components/SavedQueriesPanel";
@@ -81,6 +82,18 @@ export default function AnalyzerClient({
   const copyMenuRef = useRef<HTMLDivElement>(null);
   const draftConnectionId = useRef(connection.id);
 
+  const [selectedTable, setSelectedTable] = useState<{
+    tableName: string;
+    tableSchema: string;
+  } | null>(null);
+  const [aiOpen, setAiOpen] = useState(false);
+  const [aiPrompt, setAiPrompt] = useState("");
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+  const [aiFixSelection, setAiFixSelection] = useState(false);
+  const aiRef = useRef<HTMLDivElement>(null);
+  const editorRef = useRef<SqlEditorHandle>(null);
+
   const meta = DRIVER_META[connection.driver];
   const DriverIcon = meta.icon;
 
@@ -88,6 +101,9 @@ export default function AnalyzerClient({
     function handleClickOutside(e: MouseEvent) {
       if (copyMenuRef.current && !copyMenuRef.current.contains(e.target as Node)) {
         setCopyMenuOpen(false);
+      }
+      if (aiRef.current && !aiRef.current.contains(e.target as Node)) {
+        setAiOpen(false);
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
@@ -186,6 +202,59 @@ export default function AnalyzerClient({
     setSql(historySql);
     setPanel("editor");
     runQuery(false, historySql);
+  }
+
+  async function askAi() {
+    const trimmedPrompt = aiPrompt.trim();
+    if (!trimmedPrompt && !activeSql) {
+      setAiError("Describe what you need, or select/write a query to fix.");
+      return;
+    }
+
+    setAiLoading(true);
+    setAiError(null);
+
+    try {
+      const res = await fetch(apiUrl(`/connections/${connection.id}/ai/query`), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prompt: trimmedPrompt,
+          sql: activeSql,
+          error: error ?? "",
+          table: selectedTable?.tableName ?? "",
+          tableSchema: selectedTable?.tableSchema ?? "",
+        }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        setAiError(data.error ?? "AI request failed.");
+        return;
+      }
+
+      if (aiFixSelection && selectedSql.trim()) {
+        editorRef.current?.replaceSelection(data.sql);
+      } else {
+        setSelectedSql("");
+        setSql(data.sql);
+      }
+      setPanel("editor");
+      setAiOpen(false);
+      setAiPrompt("");
+      setAiFixSelection(false);
+    } catch {
+      setAiError("AI request failed.");
+    } finally {
+      setAiLoading(false);
+    }
+  }
+
+  function openAiForSelection() {
+    setAiError(null);
+    setAiPrompt("");
+    setAiFixSelection(true);
+    setAiOpen(true);
   }
 
   async function handleExport(format: "csv" | "markdown") {
@@ -333,7 +402,11 @@ export default function AnalyzerClient({
                 transition={{ duration: 0.15 }}
               >
                 {panel === "tables" && (
-                  <TableBrowser connectionId={connection.id} onUseTable={useTable} />
+                  <TableBrowser
+                    connectionId={connection.id}
+                    onUseTable={useTable}
+                    onSelectTable={setSelectedTable}
+                  />
                 )}
                 {panel === "saved" && (
                   <SavedQueriesPanel
@@ -385,12 +458,14 @@ export default function AnalyzerClient({
 
         <main className="flex flex-1 flex-col gap-3 overflow-auto p-4">
           <SqlEditor
+            ref={editorRef}
             value={sql}
             onChange={setSql}
             driver={connection.driver}
             terms={terms}
             onRun={() => runQuery(false)}
             onSelectionChange={setSelectedSql}
+            onAskAiForSelection={openAiForSelection}
             disabled={running}
           />
 
@@ -428,6 +503,86 @@ export default function AnalyzerClient({
                 onChange={(e) => setLimit(Number(e.target.value))}
               />
             </label>
+
+            <div className="relative" ref={aiRef}>
+              <button
+                onClick={() => {
+                  setAiError(null);
+                  setAiFixSelection(false);
+                  setAiOpen((v) => !v);
+                }}
+                className="btn-secondary"
+                title="Ask AI to write or fix this query"
+              >
+                <Sparkles className="h-3.5 w-3.5 text-indigo-500 dark:text-indigo-400" />
+                Ask AI
+              </button>
+
+              <AnimatePresence>
+                {aiOpen && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -4, scale: 0.97 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: -4, scale: 0.97 }}
+                    transition={{ duration: 0.12 }}
+                    className="absolute left-0 top-full z-20 mt-1.5 w-80 rounded-lg border border-zinc-200 bg-white p-3 shadow-lg dark:border-zinc-700 dark:bg-zinc-900"
+                  >
+                    <p className="mb-1.5 text-xs text-zinc-500 dark:text-zinc-400">
+                      {aiFixSelection && selectedSql.trim() ? (
+                        "Fixing only the highlighted snippet."
+                      ) : (
+                        <>
+                          {selectedTable
+                            ? `Using schema for ${selectedTable.tableName}.`
+                            : "Select a table in the Tables panel for richer context."}{" "}
+                          {error && "Leave blank to fix the current error."}
+                        </>
+                      )}
+                    </p>
+                    <textarea
+                      autoFocus
+                      className="input h-20 w-full resize-none"
+                      placeholder={
+                        aiFixSelection && selectedSql.trim()
+                          ? "Optional: instructions for fixing this snippet…"
+                          : error
+                            ? "Optional: extra instructions for the fix…"
+                            : "Describe the query you want…"
+                      }
+                      value={aiPrompt}
+                      onChange={(e) => setAiPrompt(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                          e.preventDefault();
+                          askAi();
+                        }
+                      }}
+                      disabled={aiLoading}
+                    />
+                    {aiError && (
+                      <p className="mt-1.5 text-xs text-red-600 dark:text-red-400">{aiError}</p>
+                    )}
+                    <div className="mt-2 flex justify-end gap-2">
+                      <button
+                        onClick={() => setAiOpen(false)}
+                        className="btn-secondary"
+                        disabled={aiLoading}
+                      >
+                        Cancel
+                      </button>
+                      <button onClick={askAi} className="btn-primary" disabled={aiLoading}>
+                        {aiLoading ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Sparkles className="h-3.5 w-3.5" />
+                        )}
+                        {aiFixSelection || (error && !aiPrompt.trim()) ? "Fix" : "Generate"}
+                      </button>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
 
             <div className="mx-1 h-5 w-px bg-zinc-200 dark:bg-zinc-800" />
 
@@ -517,7 +672,19 @@ export default function AnalyzerClient({
                 className="flex items-start gap-2 overflow-hidden rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/60 dark:text-red-300"
               >
                 <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-                <span className="font-mono text-xs leading-relaxed">{error}</span>
+                <span className="flex-1 font-mono text-xs leading-relaxed">{error}</span>
+                <button
+                  onClick={() => {
+                    setAiError(null);
+                    setAiPrompt("");
+                    setAiFixSelection(false);
+                    setAiOpen(true);
+                  }}
+                  className="flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-medium text-red-700 underline decoration-red-300 transition-colors hover:text-red-900 dark:text-red-300 dark:decoration-red-800 dark:hover:text-red-100"
+                >
+                  <Sparkles className="h-3 w-3" />
+                  Fix with AI
+                </button>
               </motion.div>
             )}
 
