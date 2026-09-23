@@ -73,3 +73,6 @@ Runs the PHP server, queue listener, log tailer, and Vite dev server together (v
 ## License
 
 The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+
+
+![Sql Editor Demo Image](demo-image.png)

@@ -14,6 +14,8 @@ import {
   FileDown,
   FileJson,
   Loader2,
+  PanelLeftClose,
+  PanelLeftOpen,
   Play,
   Plus,
   Sparkles,
@@ -120,6 +122,24 @@ function saveSidebarWidth(width: number): void {
   }
 }
 
+const SIDEBAR_COLLAPSED_KEY = "sqlclient:sidebarCollapsed";
+
+function loadSidebarCollapsed(): boolean {
+  try {
+    return localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function saveSidebarCollapsed(collapsed: boolean): void {
+  try {
+    localStorage.setItem(SIDEBAR_COLLAPSED_KEY, collapsed ? "1" : "0");
+  } catch {
+    // best-effort
+  }
+}
+
 export default function AnalyzerClient({
   connection,
   initialSavedQueries,
@@ -166,6 +186,15 @@ export default function AnalyzerClient({
   const isResizingRef = useRef(false);
   const [isResizing, setIsResizing] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(() => loadSidebarWidth());
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => loadSidebarCollapsed());
+
+  function toggleSidebar() {
+    setSidebarCollapsed((prev) => {
+      const next = !prev;
+      saveSidebarCollapsed(next);
+      return next;
+    });
+  }
 
   const meta = DRIVER_META[connection.driver];
   const DriverIcon = meta.icon;
@@ -462,7 +491,7 @@ export default function AnalyzerClient({
   }
 
   return (
-    <div className="flex flex-1 flex-col">
+    <div className="flex h-screen flex-col overflow-hidden">
       <AnimatePresence>
         {activeTab.confirm && (
           <ConfirmWriteDialog
@@ -474,7 +503,7 @@ export default function AnalyzerClient({
       </AnimatePresence>
 
       <header
-        className="relative flex items-center justify-between border-b border-zinc-200/80 bg-white/80 px-5 py-3 backdrop-blur-md dark:border-zinc-800/80 dark:bg-zinc-950/80"
+        className="relative flex shrink-0 items-center justify-between border-b border-zinc-200/80 bg-white/80 px-5 py-3 backdrop-blur-md dark:border-zinc-800/80 dark:bg-zinc-950/80"
         style={
           connection.color
             ? {
@@ -492,6 +521,17 @@ export default function AnalyzerClient({
           />
         )}
         <div className="flex items-center gap-2.5">
+          <button
+            onClick={toggleSidebar}
+            title={sidebarCollapsed ? "Show sidebar" : "Hide sidebar"}
+            className="rounded-md p-1.5 text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-800 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+          >
+            {sidebarCollapsed ? (
+              <PanelLeftOpen className="h-4 w-4" strokeWidth={2.25} />
+            ) : (
+              <PanelLeftClose className="h-4 w-4" strokeWidth={2.25} />
+            )}
+          </button>
           <Brand href="/connections" />
           <ChevronRight className="h-3.5 w-3.5 text-zinc-300 dark:text-zinc-700" />
           <Link
@@ -525,6 +565,7 @@ export default function AnalyzerClient({
       </header>
 
       <div className="flex flex-1 overflow-hidden">
+        {!sidebarCollapsed && (
         <aside
           ref={asideRef}
           style={{ width: sidebarWidth }}
@@ -606,7 +647,9 @@ export default function AnalyzerClient({
             </AnimatePresence>
           </div>
         </aside>
+        )}
 
+        {!sidebarCollapsed && (
         <div
           onPointerDown={startSidebarResize}
           onPointerMove={onSidebarResizeMove}
@@ -628,9 +671,10 @@ export default function AnalyzerClient({
             }`}
           />
         </div>
+        )}
 
-        <main className="flex flex-1 flex-col gap-3 overflow-auto p-4">
-          <div className="flex items-center gap-1 overflow-x-auto">
+        <main className="flex flex-1 flex-col gap-3 overflow-hidden p-4">
+          <div className="flex shrink-0 items-center gap-1 overflow-x-auto">
             {tabs.map((tab) => {
               const active = tab.id === activeTabId;
               return (
@@ -745,20 +789,22 @@ export default function AnalyzerClient({
             </button>
           </div>
 
-          <SqlEditor
-            key={activeTabId}
-            ref={editorRef}
-            value={activeTab.sql}
-            onChange={(v) => updateTab(activeTabId, { sql: v })}
-            driver={connection.driver}
-            terms={terms}
-            onRun={() => runQuery(activeTabId)}
-            onSelectionChange={(s) => updateTab(activeTabId, { selectedSql: s })}
-            onAskAiForSelection={openAiForSelection}
-            disabled={activeTab.running}
-          />
+          <div className="shrink-0">
+            <SqlEditor
+              key={activeTabId}
+              ref={editorRef}
+              value={activeTab.sql}
+              onChange={(v) => updateTab(activeTabId, { sql: v })}
+              driver={connection.driver}
+              terms={terms}
+              onRun={() => runQuery(activeTabId)}
+              onSelectionChange={(s) => updateTab(activeTabId, { selectedSql: s })}
+              onAskAiForSelection={openAiForSelection}
+              disabled={activeTab.running}
+            />
+          </div>
 
-          <div className="flex flex-wrap items-center gap-2.5">
+          <div className="flex shrink-0 flex-wrap items-center gap-2.5">
             <button
               onClick={() => runQuery(activeTabId)}
               disabled={activeTab.running}
@@ -994,23 +1040,26 @@ export default function AnalyzerClient({
             )}
           </AnimatePresence>
 
-          {!activeTab.error && activeTab.columns.length > 0 && (
-            <motion.div
-              key={activeTab.hasRun ? "results" : "empty"}
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.25 }}
-            >
-              <ResultsTable columns={activeTab.columns} rows={activeTab.rows} />
-            </motion.div>
-          )}
+          <div className="min-h-0 flex-1">
+            {!activeTab.error && activeTab.columns.length > 0 && (
+              <motion.div
+                key={activeTab.hasRun ? "results" : "empty"}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.25 }}
+                className="h-full"
+              >
+                <ResultsTable columns={activeTab.columns} rows={activeTab.rows} />
+              </motion.div>
+            )}
 
-          {!activeTab.hasRun && !activeTab.error && (
-            <div className="flex flex-1 flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-zinc-200 py-16 text-center text-zinc-400 dark:border-zinc-800 dark:text-zinc-600">
-              <Code2 className="h-8 w-8" strokeWidth={1.5} />
-              <p className="text-sm">Run a query to see results here.</p>
-            </div>
-          )}
+            {!activeTab.hasRun && !activeTab.error && (
+              <div className="flex h-full flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-zinc-200 py-16 text-center text-zinc-400 dark:border-zinc-800 dark:text-zinc-600">
+                <Code2 className="h-8 w-8" strokeWidth={1.5} />
+                <p className="text-sm">Run a query to see results here.</p>
+              </div>
+            )}
+          </div>
         </main>
       </div>
     </div>

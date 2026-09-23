@@ -131,13 +131,7 @@ export default function TableBrowser({
           <span className="text-xs">No tables found.</span>
         </div>
       ) : (
-        <ul
-          className=""
-          style={{
-            maxHeight: "calc(100vh - 50px)",
-            overflow: "auto",
-          }}
-        >
+        <ul>
    
           {tables.map((t) => {
             const open = selectedKey === t.tableKey;
