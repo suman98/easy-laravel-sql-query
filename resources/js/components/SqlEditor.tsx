@@ -1,4 +1,13 @@
-import { forwardRef, useImperativeHandle, useMemo, useRef, useState } from "react";
+import {
+  forwardRef,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 import CodeMirror, { type ReactCodeMirrorRef } from "@uiw/react-codemirror";
 import { sql, MySQL, PostgreSQL, SQLite } from "@codemirror/lang-sql";
 import { javascript } from "@codemirror/lang-javascript";
@@ -25,6 +34,32 @@ const SQL_FORMAT_DIALECTS: Partial<Record<Driver, SqlLanguage>> = {
   mysql: "mysql",
   pgsql: "postgresql",
   sqlite: "sqlite",
+};
+
+const HEIGHT_STORAGE_KEY = "sqlEditor.height";
+const DEFAULT_HEIGHT = 260;
+const MIN_HEIGHT = 120;
+const MAX_HEIGHT = 720;
+const KEYBOARD_STEP = 20;
+
+const clampHeight = (h: number) => Math.min(MAX_HEIGHT, Math.max(MIN_HEIGHT, h));
+
+const readStoredHeight = (): number => {
+  try {
+    const raw = window.localStorage.getItem(HEIGHT_STORAGE_KEY);
+    const parsed = raw === null ? NaN : Number(raw);
+    return Number.isFinite(parsed) ? clampHeight(parsed) : DEFAULT_HEIGHT;
+  } catch {
+    return DEFAULT_HEIGHT;
+  }
+};
+
+const storeHeight = (h: number) => {
+  try {
+    window.localStorage.setItem(HEIGHT_STORAGE_KEY, String(h));
+  } catch {
+    // storage unavailable (private mode, quota) — height just won't persist
+  }
 };
 
 export interface SqlEditorHandle {
@@ -78,6 +113,59 @@ const SqlEditor = forwardRef<
   );
 
   const [selectedLength, setSelectedLength] = useState(0);
+
+  const [height, setHeight] = useState(readStoredHeight);
+  const [resizing, setResizing] = useState(false);
+  const heightRef = useRef(height);
+  const dragRef = useRef<{ startY: number; startHeight: number } | null>(null);
+
+  const updateHeight = (next: number) => {
+    const clamped = clampHeight(next);
+    heightRef.current = clamped;
+    setHeight(clamped);
+  };
+
+  // Keep the cursor and disable text selection page-wide while dragging; the
+  // cleanup also restores them if the editor unmounts mid-drag.
+  useEffect(() => {
+    if (!resizing) return;
+    const { cursor, userSelect } = document.body.style;
+    document.body.style.cursor = "ns-resize";
+    document.body.style.userSelect = "none";
+    return () => {
+      document.body.style.cursor = cursor;
+      document.body.style.userSelect = userSelect;
+    };
+  }, [resizing]);
+
+  const onResizePointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    // Capture so move/up keep firing here even when the cursor leaves the handle.
+    e.currentTarget.setPointerCapture(e.pointerId);
+    dragRef.current = { startY: e.clientY, startHeight: heightRef.current };
+    setResizing(true);
+  };
+
+  const onResizePointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
+    const drag = dragRef.current;
+    if (!drag) return;
+    updateHeight(drag.startHeight + (e.clientY - drag.startY));
+  };
+
+  const endResize = () => {
+    if (!dragRef.current) return;
+    dragRef.current = null;
+    setResizing(false);
+    storeHeight(heightRef.current);
+  };
+
+  const onResizeKeyDown = (e: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
+    e.preventDefault();
+    updateHeight(heightRef.current + (e.key === "ArrowDown" ? KEYBOARD_STEP : -KEYBOARD_STEP));
+    storeHeight(heightRef.current);
+  };
 
   const formatDialect = SQL_FORMAT_DIALECTS[driver];
 
@@ -194,7 +282,7 @@ const SqlEditor = forwardRef<
       <CodeMirror
         ref={cmRef}
         value={value}
-        height="260px"
+        height={`${height}px`}
         theme="dark"
         basicSetup={{ autocompletion: false }}
         extensions={extensions}
@@ -202,6 +290,30 @@ const SqlEditor = forwardRef<
         editable={!disabled}
         className="text-sm"
       />
+      <div
+        role="separator"
+        aria-orientation="horizontal"
+        aria-label="Resize editor"
+        aria-valuemin={MIN_HEIGHT}
+        aria-valuemax={MAX_HEIGHT}
+        aria-valuenow={height}
+        tabIndex={0}
+        onPointerDown={onResizePointerDown}
+        onPointerMove={onResizePointerMove}
+        onPointerUp={endResize}
+        onPointerCancel={endResize}
+        onKeyDown={onResizeKeyDown}
+        title="Drag to resize"
+        className={`group flex h-2.5 cursor-ns-resize touch-none items-center justify-center border-t border-zinc-800 bg-zinc-900 outline-none transition-colors hover:bg-zinc-800 focus-visible:bg-zinc-800 ${
+          resizing ? "bg-zinc-800" : ""
+        }`}
+      >
+        <span
+          className={`h-0.5 w-8 rounded-full transition-colors group-hover:bg-indigo-400/70 group-focus-visible:bg-indigo-400/70 ${
+            resizing ? "bg-indigo-400/70" : "bg-zinc-600"
+          }`}
+        />
+      </div>
     </div>
   );
 });

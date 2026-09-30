@@ -673,7 +673,7 @@ export default function AnalyzerClient({
         </div>
         )}
 
-        <main className="flex flex-1 flex-col gap-3 overflow-hidden p-4">
+        <main className="flex flex-1 flex-col gap-3 overflow-y-auto overflow-x-hidden p-4">
           <div className="flex shrink-0 items-center gap-1 overflow-x-auto">
             {tabs.map((tab) => {
               const active = tab.id === activeTabId;
@@ -1040,7 +1040,7 @@ export default function AnalyzerClient({
             )}
           </AnimatePresence>
 
-          <div className="min-h-0 flex-1">
+          <div className="min-h-80 flex-1">
             {!activeTab.error && activeTab.columns.length > 0 && (
               <motion.div
                 key={activeTab.hasRun ? "results" : "empty"}
