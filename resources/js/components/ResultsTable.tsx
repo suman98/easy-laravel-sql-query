@@ -15,19 +15,21 @@ function formatCell(value: unknown): { text: string; isNull: boolean } {
 export default function ResultsTable({
   columns,
   rows,
+  search,
+  onSearchChange,
 }: {
   columns: string[];
   rows: unknown[][];
+  search: string;
+  onSearchChange: (value: string) => void;
 }) {
   const [page, setPage] = useState(1);
   const [trackedRows, setTrackedRows] = useState(rows);
   const [viewing, setViewing] = useState<{ column: string; value: unknown } | null>(null);
-  const [search, setSearch] = useState("");
 
   if (rows !== trackedRows) {
     setTrackedRows(rows);
     setPage(1);
-    setSearch("");
   }
 
   const filteredRows = useMemo(() => {
@@ -56,7 +58,7 @@ export default function ResultsTable({
         <input
           value={search}
           onChange={(e) => {
-            setSearch(e.target.value);
+            onSearchChange(e.target.value);
             setPage(1);
           }}
           placeholder="Filter results…"
@@ -64,7 +66,7 @@ export default function ResultsTable({
         />
         {search && (
           <button
-            onClick={() => setSearch("")}
+            onClick={() => onSearchChange("")}
             className="shrink-0 rounded p-0.5 text-zinc-400 transition-colors hover:bg-zinc-200/70 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
           >
             <X className="h-3.5 w-3.5" />

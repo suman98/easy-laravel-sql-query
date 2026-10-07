@@ -63,6 +63,7 @@ interface QueryTab {
   error: string | null;
   columns: string[];
   rows: unknown[][];
+  resultsFilter: string;
   rowCount: number | null;
   executionTime: number | null;
   writeSuccess: string | null;
@@ -81,6 +82,7 @@ function createTab(id: string, name: string, sql = "", color: string | null = nu
     error: null,
     columns: [],
     rows: [],
+    resultsFilter: "",
     rowCount: null,
     executionTime: null,
     writeSuccess: null,
@@ -372,6 +374,7 @@ export default function AnalyzerClient({
       updateTab(tabId, {
         columns: data.columns,
         rows: data.rows,
+        resultsFilter: "",
         rowCount: data.rowCount,
         executionTime: data.executionTime,
         hasRun: true,
@@ -1049,7 +1052,12 @@ export default function AnalyzerClient({
                 transition={{ duration: 0.25 }}
                 className="h-full"
               >
-                <ResultsTable columns={activeTab.columns} rows={activeTab.rows} />
+                <ResultsTable
+                  columns={activeTab.columns}
+                  rows={activeTab.rows}
+                  search={activeTab.resultsFilter}
+                  onSearchChange={(v) => updateTab(activeTab.id, { resultsFilter: v })}
+                />
               </motion.div>
             )}
 
