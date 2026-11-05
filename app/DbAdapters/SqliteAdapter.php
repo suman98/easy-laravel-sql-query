@@ -7,8 +7,9 @@ use PDO;
 use PDOException;
 use RuntimeException;
 
-class SqliteAdapter implements DbAdapter
+class SqliteAdapter implements DbAdapter, EditableAdapter
 {
+    use EditsRowsWithPdo;
     use FormatsBytes;
 
     private PDO $pdo;
@@ -130,5 +131,41 @@ class SqliteAdapter implements DbAdapter
         } catch (PDOException $e) {
             throw new RuntimeException($e->getMessage(), previous: $e);
         }
+    }
+
+    public function normalizeIdentifier(string $name, bool $quoted): string
+    {
+        return $name;
+    }
+
+    public function quoteIdentifier(string $name): string
+    {
+        return $this->quoteIdent($name);
+    }
+
+    public function describeTable(?string $schema, string $table): ?array
+    {
+        $schema = $schema ?: 'main';
+        $schemaIdent = $this->quoteIdent($schema);
+
+        $tableStmt = $this->pdo->prepare("SELECT name FROM {$schemaIdent}.sqlite_master WHERE type = 'table' AND name = :name COLLATE NOCASE");
+        $tableStmt->execute(['name' => $table]);
+        $name = $tableStmt->fetchColumn();
+
+        if ($name === false) {
+            return null;
+        }
+
+        $info = $this->pdo->query("PRAGMA {$schemaIdent}.table_info({$this->quoteIdent($name)})")->fetchAll();
+
+        $pk = array_values(array_filter($info, fn ($col) => (int) $col['pk'] > 0));
+        usort($pk, fn ($a, $b) => (int) $a['pk'] <=> (int) $b['pk']);
+
+        return [
+            'schema' => $schema,
+            'table' => $name,
+            'columns' => array_column($info, 'name'),
+            'primaryKey' => array_column($pk, 'name'),
+        ];
     }
 }

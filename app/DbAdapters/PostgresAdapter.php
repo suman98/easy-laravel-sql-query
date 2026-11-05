@@ -7,8 +7,9 @@ use PDO;
 use PDOException;
 use RuntimeException;
 
-class PostgresAdapter implements DbAdapter
+class PostgresAdapter implements DbAdapter, EditableAdapter
 {
+    use EditsRowsWithPdo;
     use FormatsBytes;
 
     private PDO $pdo;
@@ -139,5 +140,58 @@ class PostgresAdapter implements DbAdapter
         } catch (PDOException $e) {
             throw new RuntimeException($e->getMessage(), previous: $e);
         }
+    }
+
+    public function normalizeIdentifier(string $name, bool $quoted): string
+    {
+        return $quoted ? $name : strtolower($name);
+    }
+
+    public function quoteIdentifier(string $name): string
+    {
+        return '"'.str_replace('"', '""', $name).'"';
+    }
+
+    public function describeTable(?string $schema, string $table): ?array
+    {
+        // Without a schema, to_regclass resolves the name through search_path.
+        $rel = ($schema ? $this->quoteIdentifier($schema).'.' : '').$this->quoteIdentifier($table);
+
+        $tableStmt = $this->pdo->prepare(<<<'SQL'
+            SELECT c.oid, n.nspname, c.relname
+            FROM pg_class c
+            JOIN pg_namespace n ON n.oid = c.relnamespace
+            WHERE c.oid = to_regclass(CAST(:rel AS text)) AND c.relkind IN ('r', 'p')
+            SQL);
+        $tableStmt->execute(['rel' => $rel]);
+        $found = $tableStmt->fetch();
+
+        if (! $found) {
+            return null;
+        }
+
+        $colStmt = $this->pdo->prepare(<<<'SQL'
+            SELECT attname
+            FROM pg_attribute
+            WHERE attrelid = :oid AND attnum > 0 AND NOT attisdropped
+            ORDER BY attnum
+            SQL);
+        $colStmt->execute(['oid' => $found['oid']]);
+
+        $pkStmt = $this->pdo->prepare(<<<'SQL'
+            SELECT a.attname
+            FROM pg_index i
+            JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey)
+            WHERE i.indrelid = :oid AND i.indisprimary
+            ORDER BY array_position(i.indkey::int2[], a.attnum)
+            SQL);
+        $pkStmt->execute(['oid' => $found['oid']]);
+
+        return [
+            'schema' => $found['nspname'],
+            'table' => $found['relname'],
+            'columns' => array_column($colStmt->fetchAll(), 'attname'),
+            'primaryKey' => array_column($pkStmt->fetchAll(), 'attname'),
+        ];
     }
 }

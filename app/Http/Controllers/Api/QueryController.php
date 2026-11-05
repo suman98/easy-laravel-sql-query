@@ -3,14 +3,18 @@
 namespace App\Http\Controllers\Api;
 
 use App\DbAdapters\AdapterFactory;
+use App\DbAdapters\DbAdapter;
+use App\DbAdapters\EditableAdapter;
 use App\Http\Controllers\Controller;
 use App\Models\Connection;
 use App\Models\QueryHistory;
 use App\Support\Exporter;
 use App\Support\MongoQueryParser;
 use App\Support\ResultSerializer;
+use App\Support\RowUpdateBuilder;
 use App\Support\SqlUtils;
 use Illuminate\Http\Request;
+use InvalidArgumentException;
 
 class QueryController extends Controller
 {
@@ -74,12 +78,135 @@ class QueryController extends Controller
             'execution_time' => round($executionTime, 2),
         ]);
 
+        $edit = $isWrite || $result['columns'] === []
+            ? ['editable' => null, 'reason' => null]
+            : $this->detectEditable($adapter, $sql, $result['columns']);
+
         return response()->json([
             'columns' => $result['columns'],
             'rows' => ResultSerializer::rows($result['rows']),
             'rowCount' => $result['rowCount'],
             'executionTime' => round($executionTime, 2),
             'isWriteQuery' => $isWrite,
+            'editable' => $edit['editable'],
+            'editReason' => $edit['reason'],
+        ]);
+    }
+
+    /**
+     * Decide whether a SELECT's result grid can be edited in place.
+     *
+     * @param  string[]  $columns
+     * @return array{editable: ?array, reason: ?string}
+     */
+    private function detectEditable(DbAdapter $adapter, string $sql, array $columns): array
+    {
+        if (! $adapter instanceof EditableAdapter) {
+            return ['editable' => null, 'reason' => 'Editing is not supported for this database.'];
+        }
+
+        $parsed = SqlUtils::parseSimpleSelect($sql);
+        if ($parsed === null) {
+            return ['editable' => null, 'reason' => 'Only simple single-table SELECT results can be edited.'];
+        }
+
+        try {
+            $schema = $parsed['schema']
+                ? $adapter->normalizeIdentifier($parsed['schema']['name'], $parsed['schema']['quoted'])
+                : null;
+            $table = $adapter->normalizeIdentifier($parsed['table']['name'], $parsed['table']['quoted']);
+            $target = $adapter->describeTable($schema, $table);
+        } catch (\Throwable) {
+            $target = null;
+        }
+
+        if ($target === null) {
+            return ['editable' => null, 'reason' => 'Source is not an editable table.'];
+        }
+
+        $result = RowUpdateBuilder::editableColumns($target, $parsed, $columns);
+
+        if ($result['editable'] !== null) {
+            $result['editable'] = [
+                'schema' => $target['schema'],
+                'table' => $target['table'],
+                ...$result['editable'],
+            ];
+        }
+
+        return $result;
+    }
+
+    public function updateRows(Request $request, Connection $connection)
+    {
+        $data = $request->validate([
+            'schema' => ['nullable', 'string'],
+            'table' => ['required', 'string'],
+            'changes' => ['required', 'array', 'min:1', 'max:1000'],
+            'changes.*.key' => ['required', 'array'],
+            'changes.*.values' => ['required', 'array'],
+            'dryRun' => ['boolean'],
+        ]);
+
+        $adapter = $this->adapters->make($connection);
+
+        if (! $adapter instanceof EditableAdapter) {
+            return response()->json(['error' => 'Editing is not supported for this database.'], 400);
+        }
+
+        try {
+            $target = $adapter->describeTable($data['schema'] ?? null, $data['table']);
+
+            if ($target === null || $target['primaryKey'] === []) {
+                return response()->json(['error' => 'Table not found or has no primary key.'], 400);
+            }
+
+            $statements = RowUpdateBuilder::build($adapter, $target, $data['changes']);
+        } catch (InvalidArgumentException $e) {
+            return response()->json(['error' => $e->getMessage()], 422);
+        } catch (\Throwable $e) {
+            return response()->json(['error' => $e->getMessage()], 400);
+        }
+
+        $previews = array_column($statements, 'preview');
+
+        if ($request->boolean('dryRun')) {
+            return response()->json(['statements' => $previews]);
+        }
+
+        $historySql = implode("\n", $previews);
+        $start = microtime(true);
+
+        try {
+            $affected = $adapter->executeStatements($statements);
+        } catch (\Throwable $e) {
+            QueryHistory::record($connection->id, [
+                'sql' => $historySql,
+                'is_write' => true,
+                'success' => false,
+                'error' => $e->getMessage(),
+                'row_count' => null,
+                'execution_time' => round((microtime(true) - $start) * 1000, 2),
+            ]);
+
+            return response()->json(['error' => $e->getMessage()], 400);
+        }
+
+        $executionTime = round((microtime(true) - $start) * 1000, 2);
+
+        QueryHistory::record($connection->id, [
+            'sql' => $historySql,
+            'is_write' => true,
+            'success' => true,
+            'error' => null,
+            'row_count' => $affected,
+            'execution_time' => $executionTime,
+        ]);
+
+        return response()->json([
+            'statements' => $previews,
+            'affected' => $affected,
+            'executionTime' => $executionTime,
         ]);
     }
 

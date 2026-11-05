@@ -43,6 +43,7 @@ import type {
   SavedQueryRecord,
   QueryHistoryRecord,
   AutocompleteTerm,
+  EditableInfo,
 } from "@/lib/clientTypes";
 
 type Panel = "tables" | "saved" | "history";
@@ -69,6 +70,8 @@ interface QueryTab {
   writeSuccess: string | null;
   hasRun: boolean;
   confirm: { isDdl: boolean } | null;
+  editable: EditableInfo | null;
+  editReason: string | null;
 }
 
 function createTab(id: string, name: string, sql = "", color: string | null = null): QueryTab {
@@ -88,6 +91,8 @@ function createTab(id: string, name: string, sql = "", color: string | null = nu
     writeSuccess: null,
     hasRun: false,
     confirm: null,
+    editable: null,
+    editReason: null,
   };
 }
 
@@ -362,6 +367,8 @@ export default function AnalyzerClient({
           rowCount: null,
           executionTime: null,
           hasRun: true,
+          editable: null,
+          editReason: null,
         });
         return;
       }
@@ -379,6 +386,8 @@ export default function AnalyzerClient({
         executionTime: data.executionTime,
         hasRun: true,
         writeSuccess: data.isWriteQuery ? `Query executed. ${data.rowCount} row(s) affected.` : null,
+        editable: data.editable ?? null,
+        editReason: data.editReason ?? null,
       });
     } finally {
       updateTab(tabId, { running: false });
@@ -1057,6 +1066,13 @@ export default function AnalyzerClient({
                   rows={activeTab.rows}
                   search={activeTab.resultsFilter}
                   onSearchChange={(v) => updateTab(activeTab.id, { resultsFilter: v })}
+                  connectionId={connection.id}
+                  editable={activeTab.editable}
+                  editReason={activeTab.editReason}
+                  onRowsUpdated={(rows, message) => {
+                    updateTab(activeTab.id, { rows, writeSuccess: message });
+                    refreshHistory();
+                  }}
                 />
               </motion.div>
             )}

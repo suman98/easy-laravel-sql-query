@@ -66,12 +66,22 @@ export interface AutocompleteTerm {
   type: "keyword" | "table" | "column";
 }
 
+export interface EditableInfo {
+  schema: string;
+  table: string;
+  /** Result columns that map onto editable table columns (PK excluded). */
+  columns: string[];
+  primaryKey: string[];
+}
+
 export interface QueryRunResult {
   columns: string[];
   rows: unknown[][];
   rowCount: number;
   executionTime: number;
   isWriteQuery: boolean;
+  editable: EditableInfo | null;
+  editReason: string | null;
 }
 
 export interface QueryNeedsConfirm {

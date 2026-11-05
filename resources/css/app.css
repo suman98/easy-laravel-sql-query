@@ -163,3 +163,112 @@ body {
   );
   background-size: 400% 100%;
 }
+
+/* Results grid (react-datasheet-grid) */
+.results-grid {
+  --dsg-border-color: #f4f4f5;
+  --dsg-cell-background-color: #ffffff;
+  --dsg-cell-disabled-background-color: #ffffff;
+  --dsg-header-text-color: #52525b;
+  --dsg-header-active-text-color: #18181b;
+  --dsg-selection-border-color: var(--accent);
+  --dsg-selection-background-color: rgb(79 70 229 / 0.06);
+  --dsg-selection-disabled-border-color: #a1a1aa;
+  --dsg-selection-disabled-background-color: rgb(0 0 0 / 0.03);
+  --dsg-scroll-shadow-color: rgb(0 0 0 / 0.12);
+  font-size: 12px;
+}
+
+.results-grid.is-editable {
+  --dsg-cell-disabled-background-color: #fafafa;
+}
+
+.dark .results-grid {
+  --dsg-border-color: #1f1f23;
+  --dsg-cell-background-color: #09090b;
+  --dsg-cell-disabled-background-color: #09090b;
+  --dsg-header-text-color: #a1a1aa;
+  --dsg-header-active-text-color: #f4f4f5;
+  --dsg-selection-background-color: rgb(129 140 248 / 0.08);
+  --dsg-selection-disabled-border-color: #52525b;
+  --dsg-selection-disabled-background-color: rgb(255 255 255 / 0.03);
+  --dsg-scroll-shadow-color: rgb(0 0 0 / 0.5);
+}
+
+.dark .results-grid.is-editable {
+  --dsg-cell-disabled-background-color: #111114;
+}
+
+.results-grid .dsg-container {
+  color: inherit;
+}
+
+.results-grid .dsg-cell-header {
+  background: #fafafa;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.dark .results-grid .dsg-cell-header {
+  background: #111114;
+}
+
+.results-grid .dsg-cell-header-container {
+  padding: 0 8px;
+  min-width: 0;
+}
+
+.results-grid .dsg-input {
+  color: inherit;
+  padding: 0 8px;
+}
+
+.rg-cell {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  padding: 0 8px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+/* JSON cells: preview text shrinks, the view button always stays visible. */
+.rg-cell.rg-json {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  text-overflow: clip;
+}
+
+.rg-json-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rg-json-btn {
+  flex: none;
+}
+
+.rg-gutter {
+  width: 100%;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: #a1a1aa;
+}
+
+.results-grid .dsg-cell.rg-dirty {
+  background: rgb(254 243 199);
+  box-shadow: inset 2px 0 0 0 rgb(245 158 11), 1px 1px var(--dsg-border-color);
+}
+
+.dark .results-grid .dsg-cell.rg-dirty {
+  background: rgb(245 158 11 / 0.15);
+}

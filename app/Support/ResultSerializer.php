@@ -22,6 +22,12 @@ class ResultSerializer
             return null;
         }
 
+        // JS numbers lose precision past 2^53; send big ints as strings so
+        // they display (and round-trip as row keys) exactly.
+        if (is_int($value) && abs($value) > 9007199254740991) {
+            return (string) $value;
+        }
+
         if (is_string($value) && ! mb_check_encoding($value, 'UTF-8')) {
             return '\\x'.bin2hex($value);
         }

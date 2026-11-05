@@ -7,8 +7,9 @@ use PDO;
 use PDOException;
 use RuntimeException;
 
-class MysqlAdapter implements DbAdapter
+class MysqlAdapter implements DbAdapter, EditableAdapter
 {
+    use EditsRowsWithPdo;
     use FormatsBytes;
 
     private PDO $pdo;
@@ -148,5 +149,57 @@ class MysqlAdapter implements DbAdapter
         } catch (PDOException $e) {
             throw new RuntimeException($e->getMessage(), previous: $e);
         }
+    }
+
+    public function normalizeIdentifier(string $name, bool $quoted): string
+    {
+        return $name;
+    }
+
+    public function quoteIdentifier(string $name): string
+    {
+        return '`'.str_replace('`', '``', $name).'`';
+    }
+
+    public function describeTable(?string $schema, string $table): ?array
+    {
+        $db = $schema ?: $this->connection->database;
+
+        $tableStmt = $this->pdo->prepare(<<<'SQL'
+            SELECT table_schema AS table_schema, table_name AS table_name
+            FROM information_schema.tables
+            WHERE table_schema = :db AND table_name = :table AND table_type = 'BASE TABLE'
+            SQL);
+        $tableStmt->execute(['db' => $db, 'table' => $table]);
+        $found = $tableStmt->fetch();
+
+        if (! $found) {
+            return null;
+        }
+
+        $params = ['db' => $found['table_schema'], 'table' => $found['table_name']];
+
+        $colStmt = $this->pdo->prepare(<<<'SQL'
+            SELECT column_name AS column_name
+            FROM information_schema.columns
+            WHERE table_schema = :db AND table_name = :table
+            ORDER BY ordinal_position
+            SQL);
+        $colStmt->execute($params);
+
+        $pkStmt = $this->pdo->prepare(<<<'SQL'
+            SELECT column_name AS column_name
+            FROM information_schema.key_column_usage
+            WHERE table_schema = :db AND table_name = :table AND constraint_name = 'PRIMARY'
+            ORDER BY ordinal_position
+            SQL);
+        $pkStmt->execute($params);
+
+        return [
+            'schema' => $found['table_schema'],
+            'table' => $found['table_name'],
+            'columns' => array_column($colStmt->fetchAll(), 'column_name'),
+            'primaryKey' => array_column($pkStmt->fetchAll(), 'column_name'),
+        ];
     }
 }

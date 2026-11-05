@@ -11,6 +11,7 @@ Route::put('connections/reorder', [ConnectionController::class, 'reorder']);
 
 Route::prefix('connections/{connection}')->group(function () {
     Route::post('query', [QueryController::class, 'run']);
+    Route::post('rows/update', [QueryController::class, 'updateRows']);
     Route::get('autocomplete', [QueryController::class, 'autocomplete']);
     Route::post('export', [QueryController::class, 'export']);
     Route::get('schema', [QueryController::class, 'schema']);

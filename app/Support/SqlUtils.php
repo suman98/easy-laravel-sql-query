@@ -73,4 +73,161 @@ class SqlUtils
     {
         return rtrim($sql, "; \t\n\r\0\x0B");
     }
+
+    private const IDENT = '(?:`[^`]+`|"[^"]+"|\[[^\]]+\]|[A-Za-z_][\w$]*)';
+
+    private const RESERVED_ALIASES = [
+        'WHERE', 'ORDER', 'LIMIT', 'OFFSET', 'GROUP', 'HAVING', 'JOIN', 'INNER', 'LEFT', 'RIGHT',
+        'FULL', 'CROSS', 'NATURAL', 'UNION', 'FETCH', 'FOR', 'WINDOW', 'ON', 'USING',
+    ];
+
+    /**
+     * Recognise a plain single-table SELECT (no joins, grouping, unions or
+     * DISTINCT) so its result grid can be edited. Returns null for anything
+     * more complex.
+     *
+     * @return null|array{
+     *     schema: ?array{name: string, quoted: bool},
+     *     table: array{name: string, quoted: bool},
+     *     hasStar: bool,
+     *     plainColumns: string[],
+     *     aliases: string[],
+     * }
+     */
+    public static function parseSimpleSelect(string $sql): ?array
+    {
+        $sql = preg_replace(['~/\*.*?\*/~s', '/--[^\n]*/'], ' ', $sql);
+        $sql = trim(self::stripTrailing(trim($sql)));
+
+        if (! preg_match('/^SELECT\s+(.*?)\s+FROM\s+(.+)$/is', $sql, $m)) {
+            return null;
+        }
+
+        [$selectList, $rest] = [trim($m[1]), trim($m[2])];
+
+        if (preg_match('/^(DISTINCT|ALL|TOP)\b/i', $selectList) || substr_count($selectList, '(') !== substr_count($selectList, ')')) {
+            return null;
+        }
+
+        $id = self::IDENT;
+        if (! preg_match("/^({$id})(?:\s*\.\s*({$id}))?(?:\s+(?:AS\s+)?({$id}))?(?:\s+(.*))?$/is", $rest, $fm)) {
+            return null;
+        }
+
+        $first = $fm[1];
+        $second = $fm[2] ?? '';
+        $alias = $fm[3] ?? '';
+        $tail = trim($fm[4] ?? '');
+
+        if ($alias !== '' && in_array(strtoupper($alias), self::RESERVED_ALIASES, true)) {
+            $tail = trim($alias.' '.$tail);
+            $alias = '';
+        }
+
+        if ($tail !== '' && ! preg_match('/^(WHERE|ORDER\s+BY|LIMIT|OFFSET|FETCH|FOR\s+UPDATE)\b/i', $tail)) {
+            return null;
+        }
+
+        // Ignore string contents when hunting for disqualifying keywords.
+        $tailNoStrings = preg_replace("/'(?:[^']|'')*'/", "''", $tail);
+        if (preg_match('/\b(JOIN|UNION|INTERSECT|EXCEPT|GROUP\s+BY|HAVING)\b/i', $tailNoStrings)) {
+            return null;
+        }
+
+        $schema = $second !== '' ? self::identifier($first) : null;
+        $table = self::identifier($second !== '' ? $second : $first);
+
+        $hasStar = false;
+        $plainColumns = [];
+        $aliases = [];
+
+        foreach (self::splitTopLevel($selectList) as $item) {
+            $item = trim($item);
+
+            if (preg_match("/^(?:{$id}\s*\.\s*)*\*$/", $item)) {
+                $hasStar = true;
+
+                continue;
+            }
+
+            if (preg_match("/^(?:{$id}\s*\.\s*){0,2}({$id})(?:\s+(?:AS\s+)?({$id}))?$/is", $item, $cm)) {
+                $col = self::identifier($cm[1])['name'];
+                $as = isset($cm[2]) && $cm[2] !== '' ? self::identifier($cm[2])['name'] : null;
+
+                if ($as === null || strcasecmp($as, $col) === 0) {
+                    $plainColumns[] = $col;
+                } else {
+                    $aliases[] = $as;
+                }
+
+                continue;
+            }
+
+            // Expression: its result column (if aliased) is not a real column.
+            if (preg_match("/\s(?:AS\s+)?({$id})$/is", $item, $am)) {
+                $aliases[] = self::identifier($am[1])['name'];
+            }
+        }
+
+        return [
+            'schema' => $schema,
+            'table' => $table,
+            'hasStar' => $hasStar,
+            'plainColumns' => $plainColumns,
+            'aliases' => $aliases,
+        ];
+    }
+
+    /**
+     * @return array{name: string, quoted: bool}
+     */
+    private static function identifier(string $raw): array
+    {
+        $first = $raw[0] ?? '';
+        if (in_array($first, ['`', '"', '['], true)) {
+            return ['name' => substr($raw, 1, -1), 'quoted' => true];
+        }
+
+        return ['name' => $raw, 'quoted' => false];
+    }
+
+    /**
+     * Split on commas that are not inside parentheses or quotes.
+     *
+     * @return string[]
+     */
+    private static function splitTopLevel(string $list): array
+    {
+        $parts = [];
+        $depth = 0;
+        $quote = null;
+        $buf = '';
+
+        for ($i = 0, $len = strlen($list); $i < $len; $i++) {
+            $ch = $list[$i];
+
+            if ($quote !== null) {
+                if ($ch === $quote) {
+                    $quote = null;
+                }
+            } elseif (in_array($ch, ["'", '"', '`'], true)) {
+                $quote = $ch;
+            } elseif ($ch === '(') {
+                $depth++;
+            } elseif ($ch === ')') {
+                $depth--;
+            } elseif ($ch === ',' && $depth === 0) {
+                $parts[] = $buf;
+                $buf = '';
+
+                continue;
+            }
+
+            $buf .= $ch;
+        }
+
+        $parts[] = $buf;
+
+        return $parts;
+    }
 }
