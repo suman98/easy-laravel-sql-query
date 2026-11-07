@@ -44,6 +44,7 @@ import type {
   QueryHistoryRecord,
   AutocompleteTerm,
   EditableInfo,
+  DeleteTarget,
 } from "@/lib/clientTypes";
 
 type Panel = "tables" | "saved" | "history";
@@ -72,6 +73,7 @@ interface QueryTab {
   confirm: { isDdl: boolean } | null;
   editable: EditableInfo | null;
   editReason: string | null;
+  deleteTargets: DeleteTarget[];
 }
 
 function createTab(id: string, name: string, sql = "", color: string | null = null): QueryTab {
@@ -93,6 +95,7 @@ function createTab(id: string, name: string, sql = "", color: string | null = nu
     confirm: null,
     editable: null,
     editReason: null,
+    deleteTargets: [],
   };
 }
 
@@ -369,6 +372,7 @@ export default function AnalyzerClient({
           hasRun: true,
           editable: null,
           editReason: null,
+          deleteTargets: [],
         });
         return;
       }
@@ -388,6 +392,7 @@ export default function AnalyzerClient({
         writeSuccess: data.isWriteQuery ? `Query executed. ${data.rowCount} row(s) affected.` : null,
         editable: data.editable ?? null,
         editReason: data.editReason ?? null,
+        deleteTargets: data.deleteTargets ?? [],
       });
     } finally {
       updateTab(tabId, { running: false });
@@ -1069,6 +1074,7 @@ export default function AnalyzerClient({
                   connectionId={connection.id}
                   editable={activeTab.editable}
                   editReason={activeTab.editReason}
+                  deleteTargets={activeTab.deleteTargets ?? []}
                   onRowsUpdated={(rows, message) => {
                     updateTab(activeTab.id, { rows, writeSuccess: message });
                     refreshHistory();

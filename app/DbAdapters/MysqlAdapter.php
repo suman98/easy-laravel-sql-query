@@ -41,9 +41,10 @@ class MysqlAdapter implements DbAdapter, EditableAdapter
         $stmt = $this->pdo->query($sql);
 
         if ($stmt->columnCount() > 0) {
-            $assocRows = $stmt->fetchAll();
-            $columns = $assocRows ? array_keys($assocRows[0]) : $this->columnNamesFromStatement($stmt);
-            $rows = array_map(fn ($row) => array_map(fn ($c) => $row[$c], $columns), $assocRows);
+            // Fetch by position: associative rows would collapse repeated column
+            // names (e.g. `a.id` and `b.id`) into one and show the wrong values.
+            $columns = $this->columnNamesFromStatement($stmt);
+            $rows = $stmt->fetchAll(PDO::FETCH_NUM);
 
             return ['columns' => $columns, 'rows' => $rows, 'rowCount' => count($rows)];
         }

@@ -1,21 +1,29 @@
 import { motion } from "framer-motion";
-import { AlertCircle, Loader2, Pencil } from "lucide-react";
+import { AlertCircle, Loader2, Pencil, Trash2 } from "lucide-react";
 
 export default function UpdatePreviewDialog({
+  kind = "update",
   table,
+  note,
   statements,
   running,
   error,
   onConfirm,
   onCancel,
 }: {
+  kind?: "update" | "delete";
   table: string;
+  note?: string;
   statements: string[];
   running: boolean;
   error: string | null;
   onConfirm: () => void;
   onCancel: () => void;
 }) {
+  const isDelete = kind === "delete";
+  const n = statements.length;
+  const rowsLabel = `${n} row${n === 1 ? "" : "s"}`;
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -33,18 +41,32 @@ export default function UpdatePreviewDialog({
         className="card flex max-h-[80vh] w-full max-w-2xl flex-col p-5"
       >
         <div className="flex items-start gap-3">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-600 dark:bg-amber-500/15 dark:text-amber-400">
-            <Pencil className="h-5 w-5" strokeWidth={2} />
+          <span
+            className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${
+              isDelete
+                ? "bg-red-100 text-red-600 dark:bg-red-500/15 dark:text-red-400"
+                : "bg-amber-100 text-amber-600 dark:bg-amber-500/15 dark:text-amber-400"
+            }`}
+          >
+            {isDelete ? <Trash2 className="h-5 w-5" strokeWidth={2} /> : <Pencil className="h-5 w-5" strokeWidth={2} />}
           </span>
           <div>
             <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">
-              Update {statements.length} row{statements.length === 1 ? "" : "s"} in {table}
+              {isDelete ? `Delete ${rowsLabel} from ${table}` : `Update ${rowsLabel} in ${table}`}
             </h2>
             <p className="mt-1.5 text-sm text-zinc-600 dark:text-zinc-400">
-              These statements run in a single transaction. If any fails, nothing is changed.
+              {isDelete
+                ? "This permanently removes the rows. The statements run in a single transaction: if any fails, nothing is deleted."
+                : "These statements run in a single transaction. If any fails, nothing is changed."}
             </p>
           </div>
         </div>
+
+        {note && (
+          <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-300">
+            {note}
+          </p>
+        )}
 
         <pre className="mt-4 min-h-0 flex-1 overflow-auto rounded-lg border border-zinc-200 bg-zinc-50 p-3 font-mono text-xs leading-relaxed text-zinc-800 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200">
           {statements.join("\n")}
@@ -64,10 +86,12 @@ export default function UpdatePreviewDialog({
           <button
             onClick={onConfirm}
             disabled={running}
-            className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition-all duration-150 hover:bg-amber-500 hover:shadow-md active:scale-[0.97] disabled:opacity-60"
+            className={`inline-flex items-center justify-center gap-1.5 rounded-lg px-4 py-2 text-sm font-medium text-white shadow-sm transition-all duration-150 hover:shadow-md active:scale-[0.97] disabled:opacity-60 ${
+              isDelete ? "bg-red-600 hover:bg-red-500" : "bg-amber-600 hover:bg-amber-500"
+            }`}
           >
             {running && <Loader2 className="h-4 w-4 animate-spin" />}
-            Run update
+            {isDelete ? `Delete ${rowsLabel}` : "Run update"}
           </button>
         </div>
       </motion.div>

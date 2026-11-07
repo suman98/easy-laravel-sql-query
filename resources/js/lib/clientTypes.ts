@@ -74,6 +74,14 @@ export interface EditableInfo {
   primaryKey: string[];
 }
 
+/** A source table whose rows can be deleted from the result, keyed by result column position. */
+export interface DeleteTarget {
+  schema: string;
+  table: string;
+  alias: string | null;
+  keyColumns: { name: string; index: number }[];
+}
+
 export interface QueryRunResult {
   columns: string[];
   rows: unknown[][];
@@ -82,6 +90,7 @@ export interface QueryRunResult {
   isWriteQuery: boolean;
   editable: EditableInfo | null;
   editReason: string | null;
+  deleteTargets: DeleteTarget[];
 }
 
 export interface QueryNeedsConfirm {

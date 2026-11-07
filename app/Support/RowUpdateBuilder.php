@@ -71,21 +71,13 @@ class RowUpdateBuilder
     {
         $columns = self::lowerMap($target['columns']);
         $pkLower = array_map('strtolower', $target['primaryKey']);
-        $tableRef = $adapter->quoteIdentifier($target['schema']).'.'.$adapter->quoteIdentifier($target['table']);
+        $tableRef = self::tableRef($adapter, $target);
 
         $statements = [];
 
         foreach ($changes as $i => $change) {
-            $key = self::resolve($change['key'] ?? [], $columns, "Row {$i} key");
+            $key = self::resolveKey($change['key'] ?? [], $columns, $pkLower, $i);
             $values = self::resolve($change['values'] ?? [], $columns, "Row {$i}");
-
-            $keyCols = array_map('strtolower', array_keys($key));
-            sort($keyCols);
-            $expected = $pkLower;
-            sort($expected);
-            if ($keyCols !== $expected) {
-                throw new InvalidArgumentException("Row {$i} must be identified by the full primary key.");
-            }
 
             if ($values === []) {
                 throw new InvalidArgumentException("Row {$i} has no changes.");
@@ -97,7 +89,7 @@ class RowUpdateBuilder
                 }
             }
 
-            $set = $setPreview = $where = $wherePreview = $params = [];
+            $set = $setPreview = $params = [];
 
             foreach ($values as $col => $value) {
                 $ident = $adapter->quoteIdentifier($col);
@@ -106,24 +98,108 @@ class RowUpdateBuilder
                 $params[] = $value;
             }
 
-            foreach ($key as $col => $value) {
-                if ($value === null) {
-                    throw new InvalidArgumentException("Row {$i} has a NULL primary key value.");
-                }
-                $ident = $adapter->quoteIdentifier($col);
-                $where[] = "{$ident} = ?";
-                $wherePreview[] = "{$ident} = ".$adapter->quoteLiteral($value);
-                $params[] = $value;
-            }
+            [$where, $wherePreview, $whereParams] = self::where($adapter, $key);
 
             $statements[] = [
-                'sql' => "UPDATE {$tableRef} SET ".implode(', ', $set).' WHERE '.implode(' AND ', $where),
-                'params' => $params,
-                'preview' => "UPDATE {$tableRef} SET ".implode(', ', $setPreview).' WHERE '.implode(' AND ', $wherePreview).';',
+                'sql' => "UPDATE {$tableRef} SET ".implode(', ', $set)." WHERE {$where}",
+                'params' => [...$params, ...$whereParams],
+                'preview' => "UPDATE {$tableRef} SET ".implode(', ', $setPreview)." WHERE {$wherePreview};",
             ];
         }
 
         return $statements;
+    }
+
+    /**
+     * Build one parameterized DELETE per row, each identified by its full primary key.
+     *
+     * @param  array{schema: string, table: string, columns: string[], primaryKey: string[]}  $target
+     * @param  array<int, array<string, mixed>>  $keys
+     * @return array<int, array{sql: string, params: array<int, mixed>, preview: string}>
+     */
+    public static function buildDeletes(EditableAdapter $adapter, array $target, array $keys): array
+    {
+        $columns = self::lowerMap($target['columns']);
+        $pkLower = array_map('strtolower', $target['primaryKey']);
+        $tableRef = self::tableRef($adapter, $target);
+
+        $statements = [];
+        $seen = [];
+
+        foreach ($keys as $i => $rawKey) {
+            $key = self::resolveKey($rawKey, $columns, $pkLower, $i);
+
+            // The same row selected twice would only delete once; keep the preview honest.
+            $fingerprint = json_encode($key);
+            if (isset($seen[$fingerprint])) {
+                continue;
+            }
+            $seen[$fingerprint] = true;
+
+            [$where, $wherePreview, $params] = self::where($adapter, $key);
+
+            $statements[] = [
+                'sql' => "DELETE FROM {$tableRef} WHERE {$where}",
+                'params' => $params,
+                'preview' => "DELETE FROM {$tableRef} WHERE {$wherePreview};",
+            ];
+        }
+
+        return $statements;
+    }
+
+    /**
+     * @param  array{schema: string, table: string}  $target
+     */
+    private static function tableRef(EditableAdapter $adapter, array $target): string
+    {
+        return $adapter->quoteIdentifier($target['schema']).'.'.$adapter->quoteIdentifier($target['table']);
+    }
+
+    /**
+     * Resolve a row key and require it to be exactly the table's primary key.
+     *
+     * @param  array<string, string>  $columns  lowercase => real name
+     * @param  string[]  $pkLower
+     * @return array<string, mixed>
+     */
+    private static function resolveKey(mixed $input, array $columns, array $pkLower, int|string $i): array
+    {
+        $key = self::resolve($input, $columns, "Row {$i} key");
+
+        $keyCols = array_map('strtolower', array_keys($key));
+        sort($keyCols);
+        $expected = $pkLower;
+        sort($expected);
+        if ($keyCols !== $expected) {
+            throw new InvalidArgumentException("Row {$i} must be identified by the full primary key.");
+        }
+
+        foreach ($key as $value) {
+            if ($value === null) {
+                throw new InvalidArgumentException("Row {$i} has a NULL primary key value.");
+            }
+        }
+
+        return $key;
+    }
+
+    /**
+     * @param  array<string, mixed>  $key
+     * @return array{0: string, 1: string, 2: array<int, mixed>}
+     */
+    private static function where(EditableAdapter $adapter, array $key): array
+    {
+        $where = $preview = $params = [];
+
+        foreach ($key as $col => $value) {
+            $ident = $adapter->quoteIdentifier($col);
+            $where[] = "{$ident} = ?";
+            $preview[] = "{$ident} = ".$adapter->quoteLiteral($value);
+            $params[] = $value;
+        }
+
+        return [implode(' AND ', $where), implode(' AND ', $preview), $params];
     }
 
     /**

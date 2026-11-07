@@ -179,6 +179,189 @@ class SqlUtils
     }
 
     /**
+     * Break a SELECT (joins allowed) into its source tables and select items, so
+     * result columns can be traced back to table columns. Returns null for
+     * anything it can't follow reliably: unions, grouping, derived tables,
+     * table hints, or a missing FROM.
+     *
+     * @return null|array{
+     *     tables: array<int, array{schema: ?array{name: string, quoted: bool}, table: array{name: string, quoted: bool}, alias: ?string}>,
+     *     items: array<int, array{type: 'star'|'column'|'expr', qualifier?: ?string, column?: string}>,
+     *     mergedJoin: bool,
+     * }
+     */
+    public static function parseSelectSources(string $sql): ?array
+    {
+        $sql = preg_replace(['~/\*.*?\*/~s', '/--[^\n]*/'], ' ', $sql);
+        $sql = trim(self::stripTrailing(trim($sql)));
+        $masked = self::maskNested($sql);
+
+        if (! preg_match('/^SELECT\s+/i', $masked, $sm)) {
+            return null;
+        }
+        $listStart = strlen($sm[0]);
+
+        if (! preg_match('/\bFROM\b/i', $masked, $fm, PREG_OFFSET_CAPTURE, $listStart)) {
+            return null;
+        }
+        $fromPos = $fm[0][1];
+        $fromStart = $fromPos + 4;
+
+        $end = strlen($sql);
+        $clauseEnd = '/\b(WHERE|GROUP\s+BY|HAVING|ORDER\s+BY|LIMIT|OFFSET|FETCH|FOR\s+UPDATE|FOR\s+SHARE|LOCK\s+IN|WINDOW|UNION|INTERSECT|EXCEPT)\b/i';
+        if (preg_match($clauseEnd, $masked, $em, PREG_OFFSET_CAPTURE, $fromStart)) {
+            $end = $em[0][1];
+        }
+
+        // Grouped or combined results don't map rows back to table rows.
+        if (preg_match('/\b(GROUP\s+BY|HAVING|UNION|INTERSECT|EXCEPT)\b/i', substr($masked, $fromStart))) {
+            return null;
+        }
+
+        $selectList = trim(substr($sql, $listStart, $fromPos - $listStart));
+        if (preg_match('/^TOP\b/i', $selectList)) {
+            return null;
+        }
+        $selectList = preg_replace('/^(DISTINCT|ALL)\s+/i', '', $selectList);
+
+        $tables = self::parseFromClause(substr($sql, $fromStart, $end - $fromStart), substr($masked, $fromStart, $end - $fromStart));
+        if ($tables === null) {
+            return null;
+        }
+
+        $id = self::IDENT;
+        $items = [];
+        foreach (self::splitTopLevel($selectList) as $item) {
+            $item = trim($item);
+
+            if ($item === '*') {
+                $items[] = ['type' => 'star', 'qualifier' => null];
+
+                continue;
+            }
+
+            if (preg_match("/^(?:{$id}\s*\.\s*)?({$id})\s*\.\s*\*$/", $item, $qm)) {
+                $items[] = ['type' => 'star', 'qualifier' => self::identifier($qm[1])['name']];
+
+                continue;
+            }
+
+            if (preg_match("/^(?:({$id})\s*\.\s*)?(?:({$id})\s*\.\s*)?({$id})(?:\s+(?:AS\s+)?({$id}))?$/is", $item, $cm)) {
+                $qualifier = ($cm[2] ?? '') !== '' ? $cm[2] : (($cm[1] ?? '') !== '' ? $cm[1] : null);
+                $items[] = [
+                    'type' => 'column',
+                    'qualifier' => $qualifier !== null ? self::identifier($qualifier)['name'] : null,
+                    'column' => self::identifier($cm[3])['name'],
+                ];
+
+                continue;
+            }
+
+            $items[] = ['type' => 'expr'];
+        }
+
+        return ['tables' => $tables['tables'], 'items' => $items, 'mergedJoin' => $tables['merged']];
+    }
+
+    /**
+     * @return null|array{tables: array<int, array{schema: ?array{name: string, quoted: bool}, table: array{name: string, quoted: bool}, alias: ?string}>, merged: bool}
+     */
+    private static function parseFromClause(string $raw, string $masked): ?array
+    {
+        $joinRe = '/,|\b(?:(NATURAL)\s+)?(?:(?:INNER|CROSS|LEFT|RIGHT|FULL)(?:\s+OUTER)?\s+)?(?:STRAIGHT_)?JOIN\b/i';
+        preg_match_all($joinRe, $masked, $matches, PREG_SET_ORDER | PREG_OFFSET_CAPTURE);
+
+        $segments = [];
+        $merged = false;
+        $pos = 0;
+        foreach ($matches as $match) {
+            $segments[] = substr($raw, $pos, $match[0][1] - $pos);
+            $pos = $match[0][1] + strlen($match[0][0]);
+            if (! empty($match[1][0])) {
+                $merged = true;
+            }
+        }
+        $segments[] = substr($raw, $pos);
+
+        $id = self::IDENT;
+        $tables = [];
+        foreach ($segments as $segment) {
+            $segment = trim($segment);
+            // Derived tables / table functions: their columns are unknown.
+            if ($segment === '' || $segment[0] === '(') {
+                return null;
+            }
+            if (! preg_match("/^({$id})(?:\s*\.\s*({$id}))?(?:\s+(?:AS\s+)?({$id}))?(?:\s+(ON|USING)\b.*)?$/is", $segment, $m)) {
+                return null;
+            }
+            $alias = $m[3] ?? '';
+            if ($alias !== '' && in_array(strtoupper($alias), self::RESERVED_ALIASES, true)) {
+                return null;
+            }
+            if (strtoupper($m[4] ?? '') === 'USING') {
+                $merged = true;
+            }
+            $hasSchema = ($m[2] ?? '') !== '';
+            $tables[] = [
+                'schema' => $hasSchema ? self::identifier($m[1]) : null,
+                'table' => self::identifier($hasSchema ? $m[2] : $m[1]),
+                'alias' => $alias !== '' ? self::identifier($alias)['name'] : null,
+            ];
+        }
+
+        return ['tables' => $tables, 'merged' => $merged];
+    }
+
+    /**
+     * Same-length copy of the SQL with string literals and parenthesised parts
+     * blanked out, so keyword searches only see the top level.
+     */
+    private static function maskNested(string $sql): string
+    {
+        $out = '';
+        $depth = 0;
+        $quote = null;
+
+        for ($i = 0, $len = strlen($sql); $i < $len; $i++) {
+            $ch = $sql[$i];
+
+            if ($quote !== null) {
+                $out .= $ch === $quote ? $ch : '_';
+                if ($ch === $quote) {
+                    $quote = null;
+                }
+
+                continue;
+            }
+
+            if ($ch === "'") {
+                $quote = $ch;
+                $out .= $ch;
+
+                continue;
+            }
+
+            if ($ch === '(') {
+                $depth++;
+                $out .= $ch;
+
+                continue;
+            }
+
+            if ($ch === ')') {
+                $depth = max(0, $depth - 1);
+                $out .= $ch;
+
+                continue;
+            }
+
+            $out .= $depth > 0 ? '_' : $ch;
+        }
+
+        return $out;
+    }
+
+    /**
      * @return array{name: string, quoted: bool}
      */
     private static function identifier(string $raw): array

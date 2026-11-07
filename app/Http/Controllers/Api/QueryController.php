@@ -8,6 +8,7 @@ use App\DbAdapters\EditableAdapter;
 use App\Http\Controllers\Controller;
 use App\Models\Connection;
 use App\Models\QueryHistory;
+use App\Support\DeleteTargetResolver;
 use App\Support\Exporter;
 use App\Support\MongoQueryParser;
 use App\Support\ResultSerializer;
@@ -82,6 +83,15 @@ class QueryController extends Controller
             ? ['editable' => null, 'reason' => null]
             : $this->detectEditable($adapter, $sql, $result['columns']);
 
+        $deleteTargets = [];
+        if (! $isWrite && $result['columns'] !== [] && $adapter instanceof EditableAdapter) {
+            try {
+                $deleteTargets = DeleteTargetResolver::resolve($adapter, $sql, $result['columns']);
+            } catch (\Throwable) {
+                $deleteTargets = [];
+            }
+        }
+
         return response()->json([
             'columns' => $result['columns'],
             'rows' => ResultSerializer::rows($result['rows']),
@@ -90,6 +100,7 @@ class QueryController extends Controller
             'isWriteQuery' => $isWrite,
             'editable' => $edit['editable'],
             'editReason' => $edit['reason'],
+            'deleteTargets' => $deleteTargets,
         ]);
     }
 
@@ -148,6 +159,41 @@ class QueryController extends Controller
             'dryRun' => ['boolean'],
         ]);
 
+        return $this->runRowStatements(
+            $request,
+            $connection,
+            $data,
+            fn (EditableAdapter $adapter, array $target) => RowUpdateBuilder::build($adapter, $target, $data['changes'])
+        );
+    }
+
+    public function deleteRows(Request $request, Connection $connection)
+    {
+        $data = $request->validate([
+            'schema' => ['nullable', 'string'],
+            'table' => ['required', 'string'],
+            'keys' => ['required', 'array', 'min:1', 'max:1000'],
+            'keys.*' => ['required', 'array'],
+            'dryRun' => ['boolean'],
+        ]);
+
+        return $this->runRowStatements(
+            $request,
+            $connection,
+            $data,
+            fn (EditableAdapter $adapter, array $target) => RowUpdateBuilder::buildDeletes($adapter, $target, $data['keys'])
+        );
+    }
+
+    /**
+     * Resolve the target table, build per-row statements, then either return the
+     * preview (dry run) or execute them in one transaction and record history.
+     *
+     * @param  array{schema?: ?string, table: string}  $data
+     * @param  callable(EditableAdapter, array): array<int, array{sql: string, params: array, preview: string}>  $build
+     */
+    private function runRowStatements(Request $request, Connection $connection, array $data, callable $build)
+    {
         $adapter = $this->adapters->make($connection);
 
         if (! $adapter instanceof EditableAdapter) {
@@ -161,7 +207,7 @@ class QueryController extends Controller
                 return response()->json(['error' => 'Table not found or has no primary key.'], 400);
             }
 
-            $statements = RowUpdateBuilder::build($adapter, $target, $data['changes']);
+            $statements = $build($adapter, $target);
         } catch (InvalidArgumentException $e) {
             return response()->json(['error' => $e->getMessage()], 422);
         } catch (\Throwable $e) {

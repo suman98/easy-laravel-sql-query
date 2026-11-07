@@ -36,9 +36,12 @@ class SqliteAdapter implements DbAdapter, EditableAdapter
 
         if ($isSelect) {
             $stmt = $this->pdo->query($sql);
-            $assocRows = $stmt->fetchAll();
-            $columns = $assocRows ? array_keys($assocRows[0]) : [];
-            $rows = array_map(fn ($row) => array_map(fn ($c) => $row[$c], $columns), $assocRows);
+            // Fetch by position so repeated column names (joins) keep their own values.
+            $columns = [];
+            for ($i = 0; $i < $stmt->columnCount(); $i++) {
+                $columns[] = $stmt->getColumnMeta($i)['name'] ?? "col{$i}";
+            }
+            $rows = $stmt->fetchAll(PDO::FETCH_NUM);
 
             return ['columns' => $columns, 'rows' => $rows, 'rowCount' => count($rows)];
         }

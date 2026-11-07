@@ -220,6 +220,49 @@ body {
   min-width: 0;
 }
 
+/* Column resize handle on the right edge of each header cell. */
+.rg-col-resize {
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 2;
+  width: 8px;
+  height: 100%;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.rg-col-resize::after {
+  content: "";
+  position: absolute;
+  top: 7px;
+  bottom: 7px;
+  right: 2px;
+  width: 2px;
+  border-radius: 1px;
+  background: transparent;
+  transition: background-color 0.12s;
+}
+
+.results-grid .dsg-cell-header:hover .rg-col-resize::after {
+  background: #d4d4d8;
+}
+
+.dark .results-grid .dsg-cell-header:hover .rg-col-resize::after {
+  background: #3f3f46;
+}
+
+.results-grid .rg-col-resize:hover::after,
+.results-grid .rg-col-resize.is-active::after {
+  background: var(--accent);
+}
+
+body.rg-resizing,
+body.rg-resizing * {
+  cursor: col-resize !important;
+  user-select: none !important;
+}
+
 .results-grid .dsg-input {
   color: inherit;
   padding: 0 8px;
@@ -264,6 +307,48 @@ body {
   color: #a1a1aa;
 }
 
+/* S.N gutter with a row checkbox (shown when rows can be deleted). */
+.rg-gutter-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 100%;
+  padding: 0 8px;
+  cursor: pointer;
+}
+
+.rg-gutter-check input {
+  width: 13px;
+  height: 13px;
+  margin: 0;
+  flex: none;
+  accent-color: var(--accent);
+  pointer-events: none;
+}
+
+.rg-gutter-check span {
+  flex: 1;
+  text-align: right;
+}
+
+.rg-gutter-head {
+  width: 100%;
+  justify-content: flex-start;
+}
+
+.rg-gutter.is-checked {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.results-grid .rg-row-checked .dsg-cell {
+  background: rgb(79 70 229 / 0.07);
+}
+
+.dark .results-grid .rg-row-checked .dsg-cell {
+  background: rgb(129 140 248 / 0.1);
+}
+
 .results-grid .dsg-cell.rg-dirty {
   background: rgb(254 243 199);
   box-shadow: inset 2px 0 0 0 rgb(245 158 11), 1px 1px var(--dsg-border-color);
@@ -271,4 +356,13 @@ body {
 
 .dark .results-grid .dsg-cell.rg-dirty {
   background: rgb(245 158 11 / 0.15);
+}
+
+/* Cells the user highlighted from the right-click menu. */
+.results-grid .dsg-cell.rg-highlight {
+  background: rgb(254 240 138);
+}
+
+.dark .results-grid .dsg-cell.rg-highlight {
+  background: rgb(250 204 21 / 0.24);
 }
